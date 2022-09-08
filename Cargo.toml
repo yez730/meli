@@ -1,0 +1,16 @@
+[package]
+name = "meli-backend"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+axum={git = "https://www.github.com/tokio-rs/axum" ,tag = "axum-v0.6.0-rc.1"}
+tokio = { version = "1.0", features = ["full"] }
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+
+serde = { version = "1.0", features = ["derive"] }
+uuid = { version = "1.0", features = ["serde", "v4"]}
+tower-http = { version = "0.3.0", features = [ "trace"] }
