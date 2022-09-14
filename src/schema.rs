@@ -86,17 +86,8 @@ diesel::table! {
     sessions (id) {
         id -> Int8,
         session_id -> Uuid,
-        user_id -> Uuid,
-        username -> Varchar,
-        client_id -> Uuid,
-        client_ip -> Varchar,
-        client_type -> Varchar,
-        source_request_id -> Uuid,
-        init_time -> Timestamptz,
         expiry_time -> Timestamptz,
-        create_time -> Timestamptz,
-        update_time -> Timestamptz,
-        extra -> Nullable<Text>,
+        extra -> Text,
     }
 }
 

@@ -1,8 +1,12 @@
+use anyhow::{anyhow,Error};
+use async_trait::async_trait;
+use axum_database_sessions::SessionError;
+use axum_sessions_auth::{HasPermission, Authentication};
 use chrono::Local;
 use diesel::prelude::*;
 use uuid::Uuid;
 
-use crate::schema::permissions;
+use crate::{schema::*, axum_pg_pool::AxumPgPool};
 
 #[derive(Queryable)]
 pub struct Permission{
@@ -48,20 +52,19 @@ pub struct Role{
 pub struct Session{
     pub id: i64,
     pub session_id: Uuid,
-    pub user_id: Uuid,
-    pub username: String,
-    pub client_id: Uuid,
-    pub client_ip: String,
-    pub client_type: String,
-    pub source_request_id: Uuid,
-    pub init_time: chrono::DateTime<Local>,
     pub expiry_time: chrono::DateTime<Local>,
-    pub create_time: chrono::DateTime<Local>,
-    pub update_time: chrono::DateTime<Local>,
-    pub extra: Option<String>,
+    pub extra: String,
 }
 
-#[derive(Queryable)]
+#[derive(Insertable)]
+#[diesel(table_name=sessions)]
+pub struct NewSession<'a> {
+    pub session_id: Uuid,
+    pub expiry_time: chrono::DateTime<Local>,
+    pub extra: &'a str,
+}
+
+#[derive(Queryable,Clone, Debug)]
 pub struct User{
     pub id: i64,
     pub user_id: Uuid,
@@ -74,6 +77,52 @@ pub struct User{
     pub update_time: chrono::DateTime<Local>,
     pub extra: Option<String>,
 }
+
+// This is only used if you want to use Token based Authentication checks
+#[async_trait]
+impl HasPermission<AxumPgPool> for User {
+    async fn has(&self, perm: &str, pool: &Option<&AxumPgPool>) -> bool {
+        let rights:Vec<&str>=serde_json::from_str(&self.permissions).unwrap(); //TODO unwrap ok?
+        if rights.contains(&&perm) {
+            true
+        }else {
+            false
+        }
+    }
+}
+
+#[async_trait]
+impl Authentication<User, Uuid, AxumPgPool> for User {
+    async fn load_user(userid: Uuid, pool: Option<&AxumPgPool>) -> Result<User, Error> {
+        use crate::schema::{users::dsl::*};
+
+        let mut conn=pool.unwrap().connection.lock().map_err(|e|anyhow!("Get connection error"))?;
+
+        let db_users=users
+            .filter(user_id.eq(userid))
+            .limit(1)
+            .load::<User>(&mut *conn)?;
+
+        if db_users.len()==0 {
+            return Err(anyhow!("No user found"));
+        }
+
+        Ok(db_users[0].clone())
+    }
+
+    fn is_authenticated(&self) -> bool {
+        true
+    }
+
+    fn is_active(&self) -> bool {
+        true
+    }
+
+    fn is_anonymous(&self) -> bool {
+        false
+    }
+}
+
 
 #[derive(Queryable)]
 pub struct Account{

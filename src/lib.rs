@@ -1,11 +1,11 @@
-mod models;
+pub mod models;
 mod schema;
+pub mod axum_pg_pool;
 
 use chrono::Local;
 use models::*;
 use uuid::Uuid;
 use std::env;
-
 
 use diesel::PgConnection;
 use diesel::prelude::*;
@@ -68,3 +68,11 @@ pub fn update_permission_enabled(conn:&mut PgConnection,id:i32){
 
     println!("Enabled permission name `{}`",permission.permission_name);
 }
+
+
+/*
+ let connection = &mut establish_connection();
+    let num_deleted = diesel::delete(posts.filter(title.like(pattern)))
+        .execute(connection)
+        .expect("Error deleting posts");
+*/
