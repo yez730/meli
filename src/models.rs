@@ -78,11 +78,26 @@ pub struct User{
     pub extra: Option<String>,
 }
 
+#[derive(Insertable)]
+#[diesel(table_name=users)]
+pub struct NewUser<'a>{
+    pub user_id: Uuid,
+    pub username: &'a str,
+    pub description: &'a str,
+    pub is_enabled: bool,
+    pub roles: &'a str,
+    pub permissions: &'a str,
+    pub create_time: chrono::DateTime<Local>,
+    pub update_time: chrono::DateTime<Local>,
+    pub extra: Option<&'a str,>,
+}
+
+
 // This is only used if you want to use Token based Authentication checks
 #[async_trait]
 impl HasPermission<AxumPgPool> for User {
-    async fn has(&self, perm: &str, pool: &Option<&AxumPgPool>) -> bool {
-        let rights:Vec<&str>=serde_json::from_str(&self.permissions).unwrap(); //TODO unwrap ok?
+    async fn has(&self, perm: &str, _pool: &Option<&AxumPgPool>) -> bool {
+        let rights:Vec<&str>=serde_json::from_str(&self.permissions).expect("饭序列化失败"); //TODO unwrap ok?
         if rights.contains(&&perm) {
             true
         }else {

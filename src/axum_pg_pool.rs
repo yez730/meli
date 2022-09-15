@@ -65,14 +65,17 @@ impl AxumDatabasePool for AxumPgPool{
             let new_session=NewSession{
                 session_id: s_uuid,
                 expiry_time: Local::now(),
-                extra: "",
+                extra: session,
             };
+
+            
 
             diesel::insert_into(sessions::table).values(&new_session)
                 .execute(&mut *conn).map_err(|e|SessionError::GenericNotSupportedError(e.to_string()))?;
         } else {
             diesel::update(sessions.find(sesses[0].id))
-                .set(expiry_time.eq(Utc.timestamp(expires,0)))
+                .set((expiry_time.eq(Utc.timestamp(expires,0)),
+                extra.eq(session)))
                 .execute(&mut *conn)
                 .map_err(|e|SessionError::GenericNotSupportedError(e.to_string()))?;
         }

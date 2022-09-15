@@ -1,5 +1,5 @@
 pub mod models;
-mod schema;
+pub mod schema;
 pub mod axum_pg_pool;
 
 use chrono::Local;
@@ -43,9 +43,9 @@ pub fn create_permission(conn:&mut PgConnection)->Permission{
 
     let new_permission=NewPermission{
         permission_id: Uuid::new_v4(),
-        permission_code: "code",
-        permission_name :"name",
-        description: "description",
+        permission_code: "Token::Index",
+        permission_name :"Token Index",
+        description: "Token Index",
         is_enabled: false,
         create_time: Local::now(),
         update_time: Local::now(),
@@ -57,6 +57,28 @@ pub fn create_permission(conn:&mut PgConnection)->Permission{
         .get_result(conn)
         .expect("Error saving permission")
 }
+
+pub fn create_user(conn:&mut PgConnection)->User{
+    use crate::schema::users;
+
+    let new_user=NewUser{
+        user_id: Uuid::new_v4(),
+        username: "yez",
+        description: "",
+        is_enabled: true,
+        roles: "[\"Admin\"]",
+        permissions: "[\"Token::Index\"]",
+        create_time: Local::now(),
+        update_time: Local::now(),
+        extra: None,
+    };
+
+    diesel::insert_into(users::table)
+        .values(&new_user)
+        .get_result(conn)
+        .expect("Error saving user")
+}
+
 
 pub fn update_permission_enabled(conn:&mut PgConnection,id:i32){
     use self::schema::permissions::dsl::{permissions, is_enabled};
@@ -76,3 +98,21 @@ pub fn update_permission_enabled(conn:&mut PgConnection,id:i32){
         .execute(connection)
         .expect("Error deleting posts");
 */
+#[cfg(test)]
+mod test{
+use super::*;
+
+    #[test]
+    fn test_create_permission(){
+        let connection = &mut establish_connection();
+        create_permission(connection);
+        assert!(true);
+    }
+
+    #[test]
+    fn test_create_user(){
+        let connection = &mut establish_connection();
+        create_user(connection);
+        assert!(true);
+    }
+}

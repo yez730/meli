@@ -112,10 +112,11 @@ checksum = "d468802bab17cbc0cc575e9b053f41e72aa36bfa6b7f55e3529ffa43161b97fa"
 [[package]]
 name = "axum"
 version = "0.6.0-rc.2"
-source = "git+https://www.github.com/tokio-rs/axum?tag=axum-v0.6.0-rc.2#54d8439e35f05c346c7f30b9c974b18fa9becb68"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d2628a243073c55aef15a1c1fe45c87f21b84f9e89ca9e7b262a180d3d03543d"
 dependencies = [
  "async-trait",
- "axum-core 0.3.0-rc.2 (git+https://www.github.com/tokio-rs/axum?tag=axum-v0.6.0-rc.2)",
+ "axum-core",
  "bitflags",
  "bytes",
  "futures-util",
@@ -156,27 +157,12 @@ dependencies = [
 ]
 
 [[package]]
-name = "axum-core"
-version = "0.3.0-rc.2"
-source = "git+https://www.github.com/tokio-rs/axum?tag=axum-v0.6.0-rc.2#54d8439e35f05c346c7f30b9c974b18fa9becb68"
-dependencies = [
- "async-trait",
- "bytes",
- "futures-util",
- "http",
- "http-body",
- "mime",
- "tower-layer",
- "tower-service",
-]
-
-[[package]]
 name = "axum_database_sessions"
 version = "4.1.0"
 source = "git+https://github.com/AscendingCreations/AxumSessions?branch=axum0.6#d29d318665c785318295f19d34daf70da47a2f1c"
 dependencies = [
  "async-trait",
- "axum-core 0.3.0-rc.2 (registry+https://github.com/rust-lang/crates.io-index)",
+ "axum-core",
  "bytes",
  "chrono",
  "cookie",
@@ -203,7 +189,7 @@ dependencies = [
  "anyhow",
  "async-recursion",
  "async-trait",
- "axum-core 0.3.0-rc.2 (registry+https://github.com/rust-lang/crates.io-index)",
+ "axum-core",
  "axum_database_sessions",
  "bytes",
  "chrono",
