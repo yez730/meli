@@ -66,8 +66,8 @@ pub fn create_user(conn:&mut PgConnection)->User{
         username: "yez",
         description: "",
         is_enabled: true,
-        roles: "[\"Admin\"]",
-        permissions: "[\"Token::Index\"]",
+        roles: &serde_json::to_string(&vec!["Admin"]).unwrap(),
+        permissions: &serde_json::to_string(&vec!["Token::Index"]).unwrap(),//TODO fix unwrap
         create_time: Local::now(),
         update_time: Local::now(),
         extra: None,

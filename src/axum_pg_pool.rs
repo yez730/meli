@@ -2,7 +2,9 @@ use std::sync::{Arc, Mutex};
 
 use async_trait::async_trait;
 use axum_database_sessions::{AxumDatabasePool, SessionError};
+use chrono::DateTime;
 use chrono::{Local, Utc,offset::TimeZone};
+use serde_json::{Value, json};
 use uuid::Uuid;
 use crate::models::{NewSession, Session};
 use crate::schema::{sessions::dsl::*,sessions}; // sessions for sessions.table
@@ -61,25 +63,33 @@ impl AxumDatabasePool for AxumPgPool{
             .limit(1)
             .load::<Session>(&mut *conn).map_err(|e|SessionError::GenericNotSupportedError(e.to_string()))?;
 
+        //重新设置时区
+        let mut v:Value=serde_json::from_str(&session)?;
+        v["expires"]=json!(v["expires"].as_str().unwrap().parse::<DateTime<Utc>>().unwrap().with_timezone(&Local)); //TODO fix unwrap
+        v["autoremove"]=json!(v["autoremove"].as_str().unwrap().parse::<DateTime<Utc>>().unwrap().with_timezone(&Local));
+        
+        let session=v.to_string();
+
         if sesses.len()==0 {
             let new_session=NewSession{
                 session_id: s_uuid,
                 expiry_time: Local::now(),
-                extra: session,
+                extra: &session,
             };
-
-            
-
             diesel::insert_into(sessions::table).values(&new_session)
                 .execute(&mut *conn).map_err(|e|SessionError::GenericNotSupportedError(e.to_string()))?;
         } else {
             diesel::update(sessions.find(sesses[0].id))
-                .set((expiry_time.eq(Utc.timestamp(expires,0)),
-                extra.eq(session)))
+                .set(
+                    (
+                        expiry_time.eq(Utc.timestamp(expires,0)),
+                        extra.eq(session)
+                    )
+                )
                 .execute(&mut *conn)
                 .map_err(|e|SessionError::GenericNotSupportedError(e.to_string()))?;
         }
-   
+
         Ok(())
     }
 

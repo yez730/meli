@@ -17,7 +17,7 @@ async fn main(){
         connection:Arc::new(Mutex::new(conn))
     };
    
-    let session_config = AxumSessionConfig::default(); //TODO key life_span cookie_name
+    let session_config = AxumSessionConfig::default(); //TODO key life_span cookie_name  memory_lifespan->zero
 
     let auth_config = AxumAuthConfig::<Uuid>::default(); //TODO with anoymous user id   auth_cookie_name
     let session_store = AxumSessionStore::<AxumPgPool>::new(Some(axum_pg_pool.clone()), session_config);
