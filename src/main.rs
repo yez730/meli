@@ -61,7 +61,6 @@ async fn login(auth: AuthSession<User, Uuid, AxumPgPool, AxumPgPool>)->&'static 
     let user=us[0].clone();
 
     //2. set user to coolie
-    tracing::debug!("user.user_id {}",user.user_id);
     auth.login_user(user.user_id).await;
 
     "login ok"
@@ -112,12 +111,14 @@ async fn loginout(auth: AuthSession<User, Uuid, AxumPgPool, AxumPgPool>)->&'stat
 }
 
 async fn index(method: Method, auth: AuthSession<User, Uuid, AxumPgPool, AxumPgPool>)->String{
-    let mut count: usize = auth.session.get("count").await.unwrap_or(0);
-    count += 1;
+    // let mut count: usize = auth.session.get("count").await.unwrap_or(0);
+    // count += 1;
 
     // Session is Also included with Auth so no need to require it in the function arguments if your using
     // AuthSession.
-    auth.session.set("count", count).await;
+    // auth.session.set("count", count).await;
+
+    // auth.session.remove("count").await;
 
     if let Some(cur_user) = auth.current_user {
 
@@ -131,7 +132,7 @@ async fn index(method: Method, auth: AuthSession<User, Uuid, AxumPgPool, AxumPgP
             return "No Permissions!".to_string();
         }
 
-        return count.to_string();
+        return "ok index".to_string();
     } else {
         return "no loged in".to_string()
     }

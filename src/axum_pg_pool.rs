@@ -97,16 +97,15 @@ impl AxumDatabasePool for AxumPgPool{
         let mut conn=self.connection.lock().map_err(|e| SessionError::GenericNotSupportedError(e.to_string()))?;
         let s_uuid=Uuid::parse_str(s_id).map_err(|e|SessionError::GenericSelectError(e.to_string()))?;
         let sesses=sessions
-            .filter(session_id.eq(s_uuid))
-            .filter(expiry_time.lt(now))
+            .filter(session_id.eq(s_uuid)) 
+            .filter(expiry_time.gt(now))
             .limit(1)
             .load::<Session>(&mut *conn).map_err(|e|SessionError::GenericNotSupportedError(e.to_string()))?;
-
         if sesses.len()==0 {
             return Err(SessionError::GenericNotSupportedError("Unexcepted error".to_string()))
         }
 
-        Ok(Some(sesses[0].extra.clone())) //TODO 
+        Ok(Some(sesses[0].extra.clone()))
     }
 
     async fn delete_one_by_id(&self, s_id: &str, _table_name: &str) -> Result<(), SessionError> {
