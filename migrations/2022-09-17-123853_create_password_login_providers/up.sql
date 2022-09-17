@@ -1,16 +1,13 @@
 -- Your SQL goes here
 
-CREATE TABLE users (
+CREATE TABLE password_login_providers (
     id BIGSERIAL PRIMARY KEY,
     user_id UUID NOT NULL,
-    username VARCHAR NOT NULL,
-    description TEXT NOT NULL,
-    permissions TEXT NOT NULL,
-    roles TEXT NOT NULL,
+    password_hash TEXT NOT NULL,
     create_time TIMESTAMPTZ NOT NULL,
     update_time TIMESTAMPTZ NOT NULL,
     data TEXT NULL
 );
 
-CREATE UNIQUE INDEX users_user_id_key ON users
+CREATE UNIQUE INDEX password_login_providers_user_id_key ON password_login_providers
 (user_id);

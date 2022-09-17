@@ -7,18 +7,12 @@ diesel::table! {
         account_id -> Uuid,
         merchant_id -> Uuid,
         cellphone -> Varchar,
-        account_name -> Varchar,
-        account_state -> Varchar,
-        account_photo_url -> Nullable<Text>,
-        credential_type -> Nullable<Varchar>,
+        email -> Nullable<Varchar>,
         credential_no -> Nullable<Varchar>,
         real_name -> Nullable<Varchar>,
-        emp_no -> Nullable<Varchar>,
-        email -> Nullable<Varchar>,
-        is_enabled -> Bool,
         create_time -> Timestamptz,
         update_time -> Timestamptz,
-        extra -> Nullable<Text>,
+        data -> Nullable<Text>,
     }
 }
 
@@ -28,16 +22,24 @@ diesel::table! {
         user_id -> Uuid,
         consumer_id -> Uuid,
         cellphone -> Varchar,
-        real_name -> Nullable<Varchar>,
-        credential_type -> Nullable<Varchar>,
+        email -> Nullable<Varchar>,
         credential_no -> Nullable<Varchar>,
-        selfie_photo_url -> Nullable<Text>,
-        is_verified -> Bool,
-        two_factor_verify -> Bool,
-        is_enabled -> Bool,
+        real_name -> Nullable<Varchar>,
         create_time -> Timestamptz,
         update_time -> Timestamptz,
-        extra -> Nullable<Text>,
+        data -> Nullable<Text>,
+    }
+}
+
+diesel::table! {
+    login_infos (id) {
+        id -> Int8,
+        login_info_id -> Uuid,
+        login_info_account -> Varchar,
+        login_info_type -> Varchar,
+        user_id -> Uuid,
+        enabled -> Bool,
+        create_time -> Timestamptz,
     }
 }
 
@@ -46,39 +48,49 @@ diesel::table! {
         id -> Int8,
         merchant_id -> Uuid,
         merchant_name -> Varchar,
-        is_enabled -> Bool,
+        company_name -> Nullable<Varchar>,
+        credential_no -> Nullable<Varchar>,
         create_time -> Timestamptz,
         update_time -> Timestamptz,
-        extra -> Nullable<Text>,
+        data -> Nullable<Text>,
+    }
+}
+
+diesel::table! {
+    password_login_providers (id) {
+        id -> Int8,
+        user_id -> Uuid,
+        password_hash -> Text,
+        create_time -> Timestamptz,
+        update_time -> Timestamptz,
+        data -> Nullable<Text>,
     }
 }
 
 diesel::table! {
     permissions (id) {
-        id -> Int4,
+        id -> Int8,
         permission_id -> Uuid,
         permission_code -> Varchar,
         permission_name -> Varchar,
         description -> Text,
-        is_enabled -> Bool,
         create_time -> Timestamptz,
         update_time -> Timestamptz,
-        extra -> Nullable<Text>,
+        data -> Nullable<Text>,
     }
 }
 
 diesel::table! {
     roles (id) {
-        id -> Int4,
+        id -> Int8,
         role_id -> Uuid,
         role_code -> Varchar,
         role_name -> Varchar,
-        description -> Text,
-        is_enabled -> Bool,
         permissions -> Text,
+        description -> Text,
         create_time -> Timestamptz,
         update_time -> Timestamptz,
-        extra -> Nullable<Text>,
+        data -> Nullable<Text>,
     }
 }
 
@@ -86,8 +98,10 @@ diesel::table! {
     sessions (id) {
         id -> Int8,
         session_id -> Uuid,
+        data -> Text,
         expiry_time -> Timestamptz,
-        extra -> Text,
+        create_time -> Timestamptz,
+        update_time -> Timestamptz,
     }
 }
 
@@ -97,19 +111,20 @@ diesel::table! {
         user_id -> Uuid,
         username -> Varchar,
         description -> Text,
-        is_enabled -> Bool,
-        roles -> Text,
         permissions -> Text,
+        roles -> Text,
         create_time -> Timestamptz,
         update_time -> Timestamptz,
-        extra -> Nullable<Text>,
+        data -> Nullable<Text>,
     }
 }
 
 diesel::allow_tables_to_appear_in_same_query!(
     accounts,
     consumers,
+    login_infos,
     merchants,
+    password_login_providers,
     permissions,
     roles,
     sessions,

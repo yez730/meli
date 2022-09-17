@@ -1,118 +1,110 @@
 pub mod models;
 pub mod schema;
 pub mod axum_pg_pool;
+pub mod util;
+pub mod login_managers;
+pub mod authorization_policy;
+pub mod handlers;
 
 use chrono::Local;
 use models::*;
 use uuid::Uuid;
-use std::env;
 
 use diesel::PgConnection;
 use diesel::prelude::*;
-use dotenvy::dotenv;
 
-pub fn establish_connection()->PgConnection{
-    dotenv().ok();
+use crate::authorization_policy::DEFAULT_PERMISSIONS_OF_MERCHANT_ACCOUNT;
 
-    let database_url=env::var("DATABASE_URL").expect("DATABASE_URL must be set");
-    PgConnection::establish(&database_url)
-        .unwrap_or_else(|_|panic!("Error connecting to {}",database_url))
 
-}
+pub fn create_or_update_super_user_account(conn:&mut PgConnection){
+    use crate::schema::{*};
 
-pub fn show_permissions(conn:&mut PgConnection){
-    use crate::schema::permissions::dsl::*;
-
-    let connection=&mut establish_connection();
-
-    let result=permissions
-        .filter(is_enabled.eq(true))
-        .limit(5)
-        .load::<Permission>(connection)
-        .expect("Error loading permissions");
-
-    println!("Displaying {} permissions",result.len());
-
-    for permission in result{
-        println!("{}----{}",permission.permission_id,permission.create_time);
-    }
-}
-
-pub fn create_permission(conn:&mut PgConnection)->Permission{
-    use crate::schema::permissions;
-
-    let new_permission=NewPermission{
-        permission_id: Uuid::new_v4(),
-        permission_code: "Token::Index",
-        permission_name :"Token Index",
-        description: "Token Index",
-        is_enabled: false,
+    // 1. insert merchant
+    let merchant_id=Uuid::new_v4();
+    let new_merchant=NewMerchant{
+        merchant_id: &merchant_id,
+        merchant_name:"测试商户",
+        company_name:None,
+        credential_no:None,
         create_time: Local::now(),
         update_time: Local::now(),
-        extra: None,
+        data: None,
     };
-
-    diesel::insert_into(permissions::table)
-        .values(&new_permission)
-        .get_result(conn)
-        .expect("Error saving permission")
-}
-
-pub fn create_user(conn:&mut PgConnection)->User{
-    use crate::schema::users;
-
+    diesel::insert_into(merchants::table)
+    .values(&new_merchant)
+    .execute(conn)
+    .unwrap();
+    
+    // 2.1 insert user
+    let user_id=Uuid::new_v4();
     let new_user=NewUser{
-        user_id: Uuid::new_v4(),
+        user_id: &user_id,
         username: "yez",
         description: "",
-        is_enabled: true,
-        roles: &serde_json::to_string(&vec!["Admin"]).unwrap(),
-        permissions: &serde_json::to_string(&vec!["Token::Index"]).unwrap(),//TODO fix unwrap
+        permissions:&serde_json::to_string(DEFAULT_PERMISSIONS_OF_MERCHANT_ACCOUNT).unwrap(),
+        roles:"[]",
         create_time: Local::now(),
         update_time: Local::now(),
-        extra: None,
+        data: None,
     };
-
     diesel::insert_into(users::table)
-        .values(&new_user)
-        .get_result(conn)
-        .expect("Error saving user")
+    .values(&new_user)
+    .execute(conn)
+    .unwrap();
+
+    // 2.1 insert account
+    let new_account=NewAccount{
+        user_id: &user_id,
+        account_id: &Uuid::new_v4(),
+        merchant_id: &merchant_id,
+        cellphone:"13764197590",
+        email:None,
+        credential_no:None,
+        real_name:Some("方小会"),
+        create_time: Local::now(),
+        update_time: Local::now(),
+        data: None,
+    };
+    diesel::insert_into(accounts::table)
+    .values(&new_account)
+    .execute(conn)
+    .unwrap();
+
+    // 3.1 add login info
+    let new_login_info=NewLoginInfo{
+        login_info_id: &Uuid::new_v4(),
+        login_info_account: "13764197590",
+        login_info_type: "Cellphone",
+        user_id: &user_id,
+        enabled: true,
+        create_time: Local::now(),
+    };
+    diesel::insert_into(login_infos::table)
+    .values(&new_login_info)
+    .execute(conn)
+    .unwrap();
+
+    // 3.2 add password login info provider
+    let new_password_login_provider=NewPasswordLoginProvider{
+        user_id: &user_id,
+        password_hash: "123456", //TODO do hash
+        create_time: Local::now(),
+        update_time: Local::now(),
+        data:None
+    };
+    diesel::insert_into(password_login_providers::table)
+    .values(&new_password_login_provider)
+    .execute(conn)
+    .unwrap();
 }
 
-
-pub fn update_permission_enabled(conn:&mut PgConnection,id:i32){
-    use self::schema::permissions::dsl::{permissions, is_enabled};
-
-    let permission=diesel::update(permissions.find(id))
-        .set(is_enabled.eq(true))
-        .get_result::<Permission>(conn)
-        .unwrap();
-
-    println!("Enabled permission name `{}`",permission.permission_name);
-}
-
-
-/*
- let connection = &mut establish_connection();
-    let num_deleted = diesel::delete(posts.filter(title.like(pattern)))
-        .execute(connection)
-        .expect("Error deleting posts");
-*/
 #[cfg(test)]
 mod test{
 use super::*;
 
     #[test]
-    fn test_create_permission(){
-        let connection = &mut establish_connection();
-        create_permission(connection);
-        assert!(true);
-    }
-
-    #[test]
-    fn test_create_user(){
-        let connection = &mut establish_connection();
-        create_user(connection);
+    fn test_create_or_update_super_user_account(){
+        create_or_update_super_user_account(&mut util::get_connection());
         assert!(true);
     }
 }

@@ -4,14 +4,15 @@ CREATE TABLE merchants (
     id BIGSERIAL PRIMARY KEY,
     merchant_id UUID NOT NULL,
     merchant_name VARCHAR NOT NULL,
-    is_enabled BOOLEAN NOT NULL, -- enabled
+    company_name VARCHAR NULL,
+    credential_no VARCHAR NULL,
     create_time TIMESTAMPTZ NOT NULL,
     update_time TIMESTAMPTZ NOT NULL,
-    extra TEXT NULL -- JSON
+    data TEXT NULL
 );
 
 CREATE UNIQUE INDEX merchants_merchant_id_key ON merchants
 (merchant_id);
 
-CREATE INDEX merchants_is_enabled_idx ON merchants
-(is_enabled);
+CREATE INDEX merchants_merchant_name_idx ON merchants
+(merchant_name);

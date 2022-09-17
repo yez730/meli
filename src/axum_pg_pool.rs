@@ -51,67 +51,72 @@ impl AxumDatabasePool for AxumPgPool{
 
     async fn store(
         &self,
-        s_id: &str,
-        session: &str,
+        s_uuid: &str,
+        s_data: &str,
         expires: i64,
         _table_name: &str,
     ) -> Result<(), SessionError> {
         let mut conn=self.connection.lock().map_err(|e| SessionError::GenericNotSupportedError(e.to_string()))?;
-        let s_uuid=Uuid::parse_str(s_id).map_err(|e|SessionError::GenericSelectError(e.to_string()))?;
-        let sesses=sessions
+        
+        let s_uuid=Uuid::parse_str(s_uuid).unwrap(); //TODO fix unwrap
+        
+        let session=sessions
             .filter(session_id.eq(s_uuid))
-            .limit(1)
-            .load::<Session>(&mut *conn).map_err(|e|SessionError::GenericNotSupportedError(e.to_string()))?;
+            .get_result::<Session>(&mut *conn).ok();
 
-        //重新设置时区
-        let mut v:Value=serde_json::from_str(&session)?;
+        //重新设置 session.data 内部时间字段的时区
+        let mut v:Value=serde_json::from_str(&s_data)?;
         v["expires"]=json!(v["expires"].as_str().unwrap().parse::<DateTime<Utc>>().unwrap().with_timezone(&Local)); //TODO fix unwrap
         v["autoremove"]=json!(v["autoremove"].as_str().unwrap().parse::<DateTime<Utc>>().unwrap().with_timezone(&Local));
+        let s_data=v.to_string();
         
-        let session=v.to_string();
-
-        if sesses.len()==0 {
-            let new_session=NewSession{
-                session_id: s_uuid,
-                expiry_time: Local::now(),
-                extra: &session,
-            };
-            diesel::insert_into(sessions::table).values(&new_session)
-                .execute(&mut *conn).map_err(|e|SessionError::GenericNotSupportedError(e.to_string()))?;
-        } else {
-            diesel::update(sessions.find(sesses[0].id))
-                .set(
-                    (
+        match session {
+            Some(session)=>{
+                diesel::update(sessions.find(session.id))
+                .set((
                         expiry_time.eq(Utc.timestamp(expires,0)),
-                        extra.eq(session)
-                    )
-                )
+                        data.eq(s_data),
+                        update_time.eq(Local::now()),
+                    ))
                 .execute(&mut *conn)
                 .map_err(|e|SessionError::GenericNotSupportedError(e.to_string()))?;
-        }
+            }
+            None=>{
+                let new_session=NewSession{
+                    session_id: &s_uuid,
+                    expiry_time: Utc.timestamp(expires,0).with_timezone(&Local),
+                    data: &s_data,
+                    create_time: Local::now(),
+                    update_time: Local::now(),
+                };
+                diesel::insert_into(sessions::table).values(&new_session)
+                    .execute(&mut *conn).map_err(|e|SessionError::GenericNotSupportedError(e.to_string()))?;
+            }
+        }       
 
         Ok(())
     }
 
-    async fn load(&self, s_id: &str, _table_name: &str) -> Result<Option<String>, SessionError> {
+    async fn load(&self, s_uuid: &str, _table_name: &str) -> Result<Option<String>, SessionError> {
         let mut conn=self.connection.lock().map_err(|e| SessionError::GenericNotSupportedError(e.to_string()))?;
-        let s_uuid=Uuid::parse_str(s_id).map_err(|e|SessionError::GenericSelectError(e.to_string()))?;
-        let sesses=sessions
+        
+        let s_uuid=Uuid::parse_str(s_uuid).unwrap();
+
+        let session=sessions
             .filter(session_id.eq(s_uuid)) 
             .filter(expiry_time.gt(now))
-            .limit(1)
-            .load::<Session>(&mut *conn).map_err(|e|SessionError::GenericNotSupportedError(e.to_string()))?;
-        if sesses.len()==0 {
-            return Err(SessionError::GenericNotSupportedError("Unexcepted error".to_string()))
-        }
+            .get_result::<Session>(&mut *conn)
+            .ok()
+            .map(|s|s.data);
 
-        Ok(Some(sesses[0].extra.clone()))
+        Ok(session)
     }
 
-    async fn delete_one_by_id(&self, s_id: &str, _table_name: &str) -> Result<(), SessionError> {
+    async fn delete_one_by_id(&self, s_uuid: &str, _table_name: &str) -> Result<(), SessionError> {
         let mut conn=self.connection.lock().map_err(|e| SessionError::GenericNotSupportedError(e.to_string()))?;
      
-        let s_uuid=Uuid::parse_str(s_id).map_err(|e|SessionError::GenericSelectError(e.to_string()))?;
+        let s_uuid=Uuid::parse_str(s_uuid).unwrap();
+        
         let _num_deleted=diesel::delete(sessions.filter(session_id.eq(s_uuid)))
             .execute(&mut *conn).map_err(|e|SessionError::GenericNotSupportedError(e.to_string()))?;
        
