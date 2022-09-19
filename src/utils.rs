@@ -5,6 +5,7 @@ use diesel::PgConnection;
 use diesel::prelude::*;
 use dotenvy::dotenv;
 
+// TODO  use diesel::PgConnection pool.?   // add to axum state??
 pub fn get_connection()->PgConnection{
     dotenv().ok();
 

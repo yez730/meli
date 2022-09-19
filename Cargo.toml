@@ -28,3 +28,5 @@ axum_sessions_auth={git = "https://github.com/AscendingCreations/AxumSessionsAut
 async-trait = "0.1.57"
 anyhow = "1.0.58"
 # thiserror = "1.0.32"
+
+rust-argon2 = "1.0"

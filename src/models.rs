@@ -1,8 +1,8 @@
 use anyhow::{anyhow,Error};
 use async_trait::async_trait;
 use axum_sessions_auth::{HasPermission, Authentication};
-use chrono::Local;
-use diesel::prelude::*;
+use chrono::{Local, DateTime};
+use diesel::{prelude::*, data_types::Cents};
 use uuid::Uuid;
 
 use crate::{schema::*, axum_pg_pool::AxumPgPool};
@@ -14,6 +14,7 @@ pub struct Permission{
     pub permission_code: String,
     pub permission_name :String,
     pub description: String,
+    pub enabled:bool,
     pub create_time: chrono::DateTime<Local>,
     pub update_time: chrono::DateTime<Local>,
     pub data: Option<String>,
@@ -26,6 +27,7 @@ pub struct NewPermission<'a>{
     pub permission_code: &'a str,
     pub permission_name :&'a str,
     pub description: &'a str,
+    pub enabled:bool,
     pub create_time: chrono::DateTime<Local>,
     pub update_time: chrono::DateTime<Local>,
     pub data: Option<&'a str>,
@@ -55,10 +57,10 @@ pub struct NewSession<'a> {
 pub struct User{
     pub id: i64,
     pub user_id: Uuid,
-    pub username: String,
     pub description: String,
     pub permissions: String,
     pub roles: String,
+    pub enabled:bool,
     pub create_time: chrono::DateTime<Local>,
     pub update_time: chrono::DateTime<Local>,
     pub data: Option<String>,
@@ -68,15 +70,14 @@ pub struct User{
 #[diesel(table_name=users)]
 pub struct NewUser<'a>{
     pub user_id: &'a Uuid,
-    pub username: &'a str,
     pub description: &'a str,
     pub permissions: &'a str,
     pub roles: &'a str,
+    pub enabled:bool,
     pub create_time: chrono::DateTime<Local>,
     pub update_time: chrono::DateTime<Local>,
     pub data: Option<&'a str>,
 }
-
 
 // This is only used if you want to use Token based Authentication checks
 #[async_trait]
@@ -91,12 +92,13 @@ impl HasPermission<AxumPgPool> for User {
 #[async_trait]
 impl Authentication<User, Uuid, AxumPgPool> for User {
     async fn load_user(userid: Uuid, pool: Option<&AxumPgPool>) -> Result<User, Error> {
-        use crate::schema::{users::dsl::*};
+        use crate::schema::*;
 
         let mut conn=pool.unwrap().connection.lock().map_err(|e|anyhow!(e.to_string()))?;
 
-        users
-            .filter(user_id.eq(userid))
+        users::dsl::users
+            .filter(users::dsl::user_id.eq(userid))
+            .filter(users::dsl::enabled.eq(true))
             .get_result::<User>(&mut *conn)
             .map_err(|e|anyhow!(e.to_string()))
     }
@@ -120,9 +122,11 @@ pub struct Consumer{
     pub user_id: Uuid,
     pub consumer_id: Uuid,
     pub cellphone:String,
-    pub email:Option<String>,
-    pub credential_no:Option<String>,
     pub real_name:Option<String>,
+    pub gender:Option<String>,
+    pub birth_day:Option<DateTime<Local>>,
+    pub balance:Option<Cents>,
+    pub enabled:bool,
     pub create_time: chrono::DateTime<Local>,
     pub update_time: chrono::DateTime<Local>,
     pub data: Option<String>,
@@ -134,14 +138,15 @@ pub struct NewConsumer<'a>{
     pub user_id: &'a Uuid,
     pub consumer_id: &'a Uuid,
     pub cellphone:&'a str,
-    pub email:Option<&'a str>,
-    pub credential_no:Option<&'a str>,
     pub real_name:Option<&'a str>,
+    pub gender:Option<&'a str>,
+    pub birth_day:Option<DateTime<Local>>,
+    pub balance:Option<Cents>,
+    pub enabled:bool,
     pub create_time: chrono::DateTime<Local>,
     pub update_time: chrono::DateTime<Local>,
     pub data: Option<&'a str>,
 }
-
 
 #[derive(Queryable)]
 pub struct Role{
@@ -151,6 +156,7 @@ pub struct Role{
     pub role_name:String,
     pub permissions:String,
     pub description:String,
+    pub enabled:bool,
     pub create_time: chrono::DateTime<Local>,
     pub update_time: chrono::DateTime<Local>,
     pub data: Option<String>,
@@ -164,8 +170,8 @@ pub struct Account{
     pub merchant_id: Uuid,
     pub cellphone:String,
     pub email:Option<String>,
-    pub credential_no:Option<String>,
     pub real_name:Option<String>,
+    pub enabled:bool,
     pub create_time: chrono::DateTime<Local>,
     pub update_time: chrono::DateTime<Local>,
     pub data: Option<String>,
@@ -179,8 +185,8 @@ pub struct NewAccount<'a>{
     pub merchant_id: &'a Uuid,
     pub cellphone:&'a str,
     pub email:Option<&'a str>,
-    pub credential_no:Option<&'a str>,
     pub real_name:Option<&'a str>,
+    pub enabled:bool,
     pub create_time: chrono::DateTime<Local>,
     pub update_time: chrono::DateTime<Local>,
     pub data: Option<&'a str>,
@@ -194,6 +200,7 @@ pub struct Merchant{
     pub merchant_name:String,
     pub company_name:Option<String>,
     pub credential_no:Option<String>,
+    pub enabled:bool,
     pub create_time: chrono::DateTime<Local>,
     pub update_time: chrono::DateTime<Local>,
     pub data: Option<String>,
@@ -206,6 +213,7 @@ pub struct NewMerchant<'a>{
     pub merchant_name:&'a str,
     pub company_name:Option<&'a str>,
     pub credential_no:Option<&'a str>,
+    pub enabled:bool,
     pub create_time: chrono::DateTime<Local>,
     pub update_time: chrono::DateTime<Local>,
     pub data: Option<&'a str>,
@@ -221,6 +229,7 @@ pub struct LoginInfo{
     pub user_id: Uuid,
     pub enabled: bool,
     pub create_time: chrono::DateTime<Local>,
+    pub update_time: chrono::DateTime<Local>,
 }
 
 #[derive(Insertable)]
@@ -232,6 +241,7 @@ pub struct NewLoginInfo<'a>{
     pub user_id: &'a Uuid,
     pub enabled: bool,
     pub create_time: chrono::DateTime<Local>,
+    pub update_time: chrono::DateTime<Local>,
 }
 
 #[derive(Queryable)]
@@ -239,6 +249,7 @@ pub struct PasswordLoginProvider{
     pub id: i64,
     pub user_id: Uuid,
     pub password_hash: String,
+    pub enabled: bool,
     pub create_time: chrono::DateTime<Local>,
     pub update_time: chrono::DateTime<Local>,
     pub data:Option<String>
@@ -249,6 +260,7 @@ pub struct PasswordLoginProvider{
 pub struct NewPasswordLoginProvider<'a>{
     pub user_id: &'a Uuid,
     pub password_hash: &'a str,
+    pub enabled: bool,
     pub create_time: chrono::DateTime<Local>,
     pub update_time: chrono::DateTime<Local>,
     pub data:Option<&'a str>

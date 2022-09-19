@@ -1,5 +1,12 @@
 pub const ALPHA_ADMINISTRATOR:&str="AlphaAdministrator";
+
+//商户管理员
 pub const MERCHANT_ADMINISTRATOR:&str="MerchantAdministrator";
+
+//商户普通权限
+pub const ACCOUNT:&str="Account";
+//顾客普通权限
+pub const CONSUMER:&str="Consumer";
 
 pub const SHOUYE:&str="Shouye";
 pub const QIANTAI_YINGYE:&str="QiantaiYingye";

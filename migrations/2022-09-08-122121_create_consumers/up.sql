@@ -5,9 +5,11 @@ CREATE TABLE consumers (
     user_id UUID NOT NULL,
     consumer_id UUID NOT NULL,
     cellphone VARCHAR NOT NULL,
-    email VARCHAR NULL,
-    credential_no VARCHAR NULL,
     real_name VARCHAR NULL,
+    gender VARCHAR NULL,
+    birth_day TIMESTAMPTZ NULL, --TODO date with tz
+    balance MONEY NULL,
+    enabled BOOLEAN NOT NULL,
     create_time TIMESTAMPTZ NOT NULL,
     update_time TIMESTAMPTZ NOT NULL,
     data TEXT NULL
@@ -22,5 +24,5 @@ CREATE UNIQUE INDEX consumers_consumer_id_key ON consumers
 CREATE INDEX consumers_cellphone_idx ON consumers
 (cellphone);
 
-CREATE INDEX consumers_email_idx ON consumers
-(email);
+CREATE INDEX consumers_enabled_idx ON consumers
+(enabled);

@@ -7,8 +7,8 @@ CREATE TABLE accounts (
     merchant_id UUID NOT NULL,
     cellphone VARCHAR NOT NULL,
     email VARCHAR NULL,
-    credential_no VARCHAR NULL,
     real_name VARCHAR NULL,
+    enabled BOOLEAN NOT NULL,
     create_time TIMESTAMPTZ NOT NULL,
     update_time TIMESTAMPTZ NOT NULL,
     data TEXT NULL
@@ -28,3 +28,6 @@ CREATE INDEX accounts_cellphone_idx ON accounts
 
 CREATE INDEX accounts_email_idx ON accounts
 (email);
+
+CREATE INDEX accounts_enabled_idx ON accounts
+(enabled);

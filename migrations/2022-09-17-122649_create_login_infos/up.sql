@@ -7,7 +7,8 @@ CREATE TABLE login_infos (
     login_info_type VARCHAR NOT NULL,
     user_id UUID NOT NULL,
     enabled BOOLEAN NOT NULL ,
-    create_time TIMESTAMPTZ NOT NULL
+    create_time TIMESTAMPTZ NOT NULL,
+    update_time TIMESTAMPTZ NOT NULL
 );
 
 CREATE UNIQUE INDEX login_infos_login_info_id_key ON login_infos
