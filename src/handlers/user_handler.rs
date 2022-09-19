@@ -1,11 +1,11 @@
 use axum::{http::Method, Json, extract::{Query, Path}};
 use axum_sessions_auth::{Auth, Rights, AuthSession};
-use chrono::{DateTime, Local};
+use chrono::{DateTime, Local, NaiveDate};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 use crate::{
     schema::*,
-    models::{Account, Merchant, Consumer}, authorization_policy, my_date_format
+    models::{Account, Merchant, Consumer, NewUser, NewConsumer, NewLoginInfo, NewPasswordLoginProvider}, authorization_policy, my_date_format
 };
 use diesel::{
     prelude::*, // for .filter
@@ -109,9 +109,7 @@ pub struct ConsumerRequest{
     pub cellphone:String,
     pub real_name:Option<String>,
     pub gender:Option<String>,
-    
-    #[serde(default, with = "my_date_format")]
-    pub birth_day:Option<DateTime<Local>>,
+    pub birth_day:Option<NaiveDate>,
 }
 
 #[derive(Serialize)]
@@ -121,7 +119,7 @@ pub struct ConsumerResponse{
     pub cellphone:String,
     pub real_name:String,//StringOption<String>,
     pub gender:String,//Option<String>,
-    pub birth_day:String,//Option<DateTime<Local>>,
+    pub birth_day:String,//Option<NaiveDate>,
     pub balance:String,//Option<Cents>, // Cents has no [Serialize]
     pub create_time: String,//chrono::DateTime<Local>,
     pub update_time: String,//chrono::DateTime<Local>,
@@ -166,11 +164,76 @@ pub async fn add_consumer(method: Method, auth: AuthSession<User, Uuid, AxumPgPo
                 return Json(Response::fail("no permission.".to_string()));
             }
             
-            //添加 
-            // 1. add user [DEFAULT_PERMISSIONS_OF_CONSUMER] // now '[]'
-            // 2. add login info /login info provider(//TODO cellphone login info provider)
-            // 3. add comsumer.
-    
+            //添加 TODO insert data with enabled settting false, finally set to true.
+            // 1. add user
+            let user_id=Uuid::new_v4();
+            let new_user=NewUser{
+                user_id: &user_id,
+                description: "test user",
+                permissions:&serde_json::to_string(authorization_policy::DEFAULT_PERMISSIONS_OF_CONSUMER).unwrap(),
+                roles:"[]",
+                enabled:true,
+                create_time: Local::now(),
+                update_time: Local::now(),
+                data: None,
+            };
+            diesel::insert_into(users::table)
+            .values(&new_user)
+            .execute(&mut get_connection())
+            .unwrap();
+            
+            // 2. add login info / login info provider  //TODO cellphone login info provider
+            // 2.1
+            let login_info=NewLoginInfo{
+                login_info_id: &Uuid::new_v4(),
+                login_info_account: &req.cellphone,
+                login_info_type: "Username", //TODO get enum variant value string
+                user_id: &user_id,
+                enabled: true,
+                create_time: Local::now(),
+                update_time: Local::now(),
+            };
+            diesel::insert_into(login_infos::table)
+            .values(&login_info)
+            .execute(&mut get_connection())
+            .unwrap();
+            // 2.2
+            let password = b"123456";
+            let salt = b"randomsalt";
+            let config = argon2::Config::default();
+            let hash = argon2::hash_encoded(password, salt, &config).unwrap();
+            let new_password_login_provider=NewPasswordLoginProvider{
+                user_id: &user_id,
+                password_hash: &hash,
+                enabled:true,
+                create_time: Local::now(),
+                update_time: Local::now(),
+                data:None
+            };
+            diesel::insert_into(password_login_providers::table)
+            .values(&new_password_login_provider)
+            .execute(&mut get_connection())
+            .unwrap();
+
+            // 3. add consumer.
+            let new_consumer=NewConsumer{
+                user_id:  &user_id,
+                consumer_id: &Uuid::new_v4(),
+                cellphone:&req.cellphone,
+                real_name:req.real_name.as_deref(),
+                gender:req.gender.as_deref(),
+                birth_day:req.birth_day,
+                balance:None,
+                enabled:true,
+                create_time: Local::now(),
+                update_time: Local::now(),
+                data: None,
+            };
+            diesel::insert_into(consumers::table)
+            .values(&new_consumer)
+            .execute(&mut get_connection())
+            .unwrap();
+
             Json(Response::succeed_with_empty())
         }
         None=>Json(Response::fail("no login, login first.".to_string()))

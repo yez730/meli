@@ -7,7 +7,7 @@ CREATE TABLE consumers (
     cellphone VARCHAR NOT NULL,
     real_name VARCHAR NULL,
     gender VARCHAR NULL,
-    birth_day TIMESTAMPTZ NULL, --TODO date with tz
+    birth_day DATE NULL,
     balance MONEY NULL,
     enabled BOOLEAN NOT NULL,
     create_time TIMESTAMPTZ NOT NULL,

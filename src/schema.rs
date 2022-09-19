@@ -24,7 +24,7 @@ diesel::table! {
         cellphone -> Varchar,
         real_name -> Nullable<Varchar>,
         gender -> Nullable<Varchar>,
-        birth_day -> Nullable<Timestamptz>,
+        birth_day -> Nullable<Date>,
         balance -> Nullable<Money>,
         enabled -> Bool,
         create_time -> Timestamptz,

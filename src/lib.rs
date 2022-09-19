@@ -152,7 +152,7 @@ mod my_date_format {
 #[cfg(test)]
 mod test{
     use serde::{Serialize,Deserialize};
-    use chrono::DateTime;
+    use chrono::{DateTime, NaiveDate};
     use super::{*,my_date_format};
 
     #[test]
@@ -170,6 +170,7 @@ mod test{
         c:Option<DateTime<Local>>,
     }
     #[test]
+    #[ignore]
     fn test_serde(){
         // use chrono::{DateTime, TimeZone, NaiveDateTime, Local};
         // let local1=Local.ymd(2015, 5, 15);
@@ -196,4 +197,22 @@ mod test{
         // assert_eq!(input4.a,"123");
         // assert_eq!(input4.b,None);
     }
+
+    #[derive(Deserialize,Serialize)]
+    struct Input3{
+        a:String,
+        b:Option<NaiveDate>,
+    }
+    #[test]
+    #[ignore]
+    fn test3(){
+        // let input1=Input3{a:"123".into(),b:Some(NaiveDate::from_ymd(2022, 4, 18))};
+        // let json1=serde_json::to_string(&input1).unwrap(); //2022-04-18
+        // assert_eq!(json1,"");
+
+        let json1=r#"{"a":"123","b":"2022-04-18"}"#;//serde_json::to_string(&input1).unwrap(); //2022-04-18
+        let input1=serde_json::from_str::<Input3>(json1).unwrap();
+        assert_eq!(input1.b,Some(NaiveDate::from_ymd(2022, 4, 20)));
+    }
+
 }

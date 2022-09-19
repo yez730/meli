@@ -1,7 +1,7 @@
 use anyhow::{anyhow,Error};
 use async_trait::async_trait;
 use axum_sessions_auth::{HasPermission, Authentication};
-use chrono::{Local, DateTime};
+use chrono::{Local, DateTime, NaiveDate};
 use diesel::{prelude::*, data_types::Cents};
 use uuid::Uuid;
 
@@ -124,7 +124,7 @@ pub struct Consumer{
     pub cellphone:String,
     pub real_name:Option<String>,
     pub gender:Option<String>,
-    pub birth_day:Option<DateTime<Local>>,
+    pub birth_day:Option<NaiveDate>,
     pub balance:Option<Cents>,
     pub enabled:bool,
     pub create_time: chrono::DateTime<Local>,
@@ -140,8 +140,8 @@ pub struct NewConsumer<'a>{
     pub cellphone:&'a str,
     pub real_name:Option<&'a str>,
     pub gender:Option<&'a str>,
-    pub birth_day:Option<DateTime<Local>>,
-    pub balance:Option<Cents>,
+    pub birth_day:Option<NaiveDate>,
+    pub balance:Option<Cents>, //TODO not null
     pub enabled:bool,
     pub create_time: chrono::DateTime<Local>,
     pub update_time: chrono::DateTime<Local>,

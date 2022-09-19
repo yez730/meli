@@ -15,4 +15,4 @@ pub const YEWU_TONGJI:&str="YewuTongji";
 pub const HOUTAI_GUANLI:&str="HoutaiGuanli";
 
 pub const DEFAULT_PERMISSIONS_OF_MERCHANT_ACCOUNT: &'static [&'static str] = &["Shouye", "QiantaiYingye", "KehuGuanli","YewuTongji","HoutaiGuanli"];
-//DEFAULT_PERMISSIONS_OF_CONSUMER Yuyue GerenXiaofeiJilu
+pub const DEFAULT_PERMISSIONS_OF_CONSUMER: &'static [&'static str] = &[];//TODO Yuyue GerenXiaofeiJilu

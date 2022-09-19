@@ -34,8 +34,7 @@ async fn main(){
         .route("/consumers/:c_id", post(update_consumer).delete(delete_consumer))
         .layer(AuthSessionLayer::<User, Uuid, AxumPgPool, AxumPgPool>::new(Some(axum_pg_pool.clone())).with_config(auth_config))
         .layer(AxumSessionLayer::new(session_store))
-        .layer(TraceLayer::new_for_http())
-        ;
+        .layer(TraceLayer::new_for_http());
 
     let addr=SocketAddr::from(([127,0,0,1],3000));
     tracing::debug!("listening on {}",addr);
