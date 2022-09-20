@@ -3,39 +3,6 @@ pub mod user_handler;
 use serde::{Serialize, Deserialize};
 
 #[derive(Serialize)]
-pub struct Response<T:Serialize>{
-    pub succeeded :bool,
-    pub message:String,
-    pub data:Option<T>,
-}
-
-impl<T:Serialize> Response<T>{
-    pub fn fail(msg:String)->Response<T>{
-        Response{
-            succeeded:false,
-            message:msg,
-            data:None,
-        }
-    }
-
-    pub fn succeed(d:T)->Response<T>{
-        Response{
-            succeeded:true,
-            message:"operation success".to_string(),
-            data:Some(d),
-        }
-    }
-
-    pub fn succeed_with_empty()->Response<T>{
-        Response{
-            succeeded:true,
-            message:"operation success".to_string(),
-            data:None,
-        }
-    }
-}
-
-#[derive(Serialize)]
 pub struct PaginatedListResponse<T:Serialize> {
     //分页索引，从 0 开始
     page_index:i32,

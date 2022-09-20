@@ -1,11 +1,11 @@
 use axum::{http::Method, Json, extract::{Query, Path}};
 use axum_sessions_auth::{Auth, Rights, AuthSession};
-use chrono::{DateTime, Local, NaiveDate};
+use chrono::{Local, NaiveDate};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 use crate::{
     schema::*,
-    models::{Account, Merchant, Consumer, NewUser, NewConsumer, NewLoginInfo, NewPasswordLoginProvider}, authorization_policy, my_date_format
+    models::{Account, Merchant, Consumer, NewUser, NewConsumer, NewLoginInfo, NewPasswordLoginProvider, Permission}, authorization_policy, my_date_format
 };
 use diesel::{
     prelude::*, // for .filter
@@ -14,7 +14,7 @@ use diesel::{
 
 use crate::{models::User, axum_pg_pool::AxumPgPool, utils::{get_connection}, login_managers::{get_login_info, password_login::verify_password}};
 
-use super::{Response, PaginatedListRequest,PaginatedListResponse};
+use super::{PaginatedListRequest,PaginatedListResponse};
 
 #[derive(Deserialize)]
 pub struct LoginRequest{
@@ -29,59 +29,61 @@ pub struct LoginResponse{
     pub account_id:Uuid,
     pub cellphone:String,
     pub real_name:String,
-    pub permissions:String,
-    pub roles:String,
+    pub permissions:Vec<PermissionResponse>,
+    pub roles:Vec<RoleResponse>,
     pub merchant_id:Uuid,
     pub merchant_name:String,
 }
 
-pub async fn login_by_username(auth: AuthSession<User, Uuid, AxumPgPool, AxumPgPool>,Json(req):Json<LoginRequest>,)->Json<Response<LoginResponse>>{
-    let login_info=get_login_info(req.username);
-    let login_info=match login_info {
-        Some(login_info)=>login_info,
-        None=> return Json(Response::fail(format!("login info not exists."))),
-    };
+#[derive(Serialize)]
+pub struct PermissionResponse{
+    pub permission_code: String,
+    pub permission_name :String,
+    //TODO must have & field count match??
+}
 
-    if !verify_password(login_info.user_id, req.password){
-        return Json(Response::fail(format!("username password doesn't match.")))
-    }
+#[derive(Serialize)]
+pub struct RoleResponse{
+    pub role_code: String,
+    pub role_name :String,
+    //TODO must have & field count match??
+}
+
+pub async fn login_by_username(auth: AuthSession<User, Uuid, AxumPgPool, AxumPgPool>,Json(req):Json<LoginRequest>,)->Result<Json<LoginResponse>,String>{ //TODO &'static str or Error
+    let login_info=get_login_info(req.username).map_err(|e|e.to_string())?;
+    
+    verify_password(login_info.user_id, req.password).map_err(|e|e.to_string())?;
     
     let user=users::dsl::users
             .filter(users::dsl::user_id.eq(login_info.user_id))
             .filter(users::dsl::enabled.eq(true))
-            .get_result::<User>(&mut get_connection());
-    let user=match user {
-        Ok(user)=>user,
-        Err(e)=>{
-            tracing::debug!("get user {} error {}.",login_info.user_id,e.to_string());
-            return Json(Response::fail(format!("get user error.")));
-        }
-    };
+            .get_result::<User>(&mut get_connection()).map_err(|e|e.to_string())?;
 
     let account=accounts::dsl::accounts
         .filter(accounts::dsl::user_id.eq(login_info.user_id))
         .filter(accounts::dsl::enabled.eq(true))
-        .get_result::<Account>(&mut get_connection());
-    let account=match account {
-        Ok(account)=>account,
-        Err(e)=>{
-            tracing::debug!("get account {} error {}.",login_info.user_id,e.to_string());
-            return Json(Response::fail(format!("get account error.")));
-        }
-    };
+        .get_result::<Account>(&mut get_connection()).map_err(|e|e.to_string())?;
 
     let merchant=merchants::dsl::merchants
         .filter(merchants::dsl::merchant_id.eq(account.merchant_id))
         .filter(merchants::dsl::enabled.eq(true))
-        .get_result::<Merchant>(&mut get_connection());
-    let merchant=match merchant {
-        Ok(merchant)=>merchant,
-        Err(e)=>{
-            tracing::debug!("get merchant {} error {}.",account.merchant_id,e.to_string());
-            return Json(Response::fail(format!("get merchant error.")));
-        }
-    };
+        .get_result::<Merchant>(&mut get_connection())
+        .map_err(|e|e.to_string())?;
+  
     
+    //TODO left join!!??
+    //get permissions/roles.
+    // let permissions=permissions::dsl::permissions
+    //     .filter(permissions::dsl::permission_id.in(user.permissions)) //TODO `in`  / `contains`
+    //     .filter(permissions::dsl::enabled.eq(true))
+    //     .get_results::<Permission>(&mut get_connection())
+    //     .map_err(|e|&*e.to_string())?;
+    // let roles=roles::dsl::roles
+    //     .filter(roles::dsl::role_id.in(user.roles)) //TODO `in`  / `contains`
+    //     .filter(roles::dsl::enabled.eq(true))
+    //     .get_results::<Role>(&mut get_connection())
+    //     .map_err(|e|&*e.to_string())?;
+
     // set user to cookie
     auth.login_user(user.user_id).await;
     auth.remember_user(true).await;
@@ -90,12 +92,13 @@ pub async fn login_by_username(auth: AuthSession<User, Uuid, AxumPgPool, AxumPgP
         account_id:account.account_id,
         cellphone:account.cellphone,
         real_name:account.real_name.unwrap_or("no setting".to_string()),
-        permissions:user.permissions,
-        roles:user.roles,
+        permissions:vec![],
+        roles:vec![],
         merchant_id:merchant.merchant_id,
         merchant_name:merchant.merchant_name,
     };
-    Json(Response::succeed(login_response))
+
+    Ok(Json(login_response))
 }
 
 pub async fn logout(auth: AuthSession<User, Uuid, AxumPgPool, AxumPgPool>){
@@ -125,190 +128,188 @@ pub struct ConsumerResponse{
     pub update_time: String,//chrono::DateTime<Local>,
 }
 
-pub async fn get_consumers(Query(params):Query<PaginatedListRequest>, method: Method, auth: AuthSession<User, Uuid, AxumPgPool, AxumPgPool>)->Json<Response<PaginatedListResponse<ConsumerResponse>>>{
-    match auth.current_user {
-        Some(cur_user) =>  {
-            if !Auth::<User, Uuid, AxumPgPool>::build([Method::GET], false)
-                .requires(Rights::any([
-                    Rights::permission(authorization_policy::ACCOUNT)
-                ]))
-                .validate(&cur_user, &method, None)
-                .await
-            {
-                return Json(Response::fail("no permission.".to_string()));
-            }
-            let _s=params.key.map_or(true, |k|k=="");
-            let merchant=consumers::dsl::consumers
-            // .or_filter(params.key.map_or(true, |k|cellphone.eq(k)))
-            // .or_filter(params.key.map_or(true, |k|email.eq(k)))
-            // .or_filter(params.key.map_or(true, |k|real_name.eq(k)))
-            .get_results::<Consumer>(&mut get_connection());
-            //TODO 分页
+pub async fn get_consumers(Query(params):Query<PaginatedListRequest>, method: Method, auth: AuthSession<User, Uuid, AxumPgPool, AxumPgPool>)->Result<Json<PaginatedListResponse<ConsumerResponse>>,String>{
+    //检查登录
+    let cur_user=auth.current_user.ok_or("no login.".to_string())?;
     
-            Json(Response::fail("msg.".to_string()))
-        }
-        None=>Json(Response::fail("no login, login first.".to_string()))
-    }
+    //检查权限
+    Auth::<User, Uuid, AxumPgPool>::build([Method::GET], false)
+        .requires(Rights::any([
+            Rights::permission(authorization_policy::ACCOUNT)
+        ]))
+        .validate(&cur_user, &method, None)
+        .await
+        .then_some(())
+        .ok_or("no permission.".to_string())?;
+
+    let _s=params.key.map_or(true, |k|k=="");
+    let merchant=consumers::dsl::consumers
+    // .or_filter(params.key.map_or(true, |k|cellphone.eq(k)))
+    // .or_filter(params.key.map_or(true, |k|email.eq(k)))
+    // .or_filter(params.key.map_or(true, |k|real_name.eq(k)))
+    .get_results::<Consumer>(&mut get_connection());
+    //TODO 分页
+
+    Err("msg.".to_string())
 }
 
-pub async fn add_consumer(method: Method, auth: AuthSession<User, Uuid, AxumPgPool, AxumPgPool>,Json(req): Json<ConsumerRequest>)->Json<Response<()>>{
-    match auth.current_user {
-        Some(cur_user) =>  {
-            if !Auth::<User, Uuid, AxumPgPool>::build([Method::POST], false)
-                .requires(Rights::any([
-                    Rights::permission(authorization_policy::ACCOUNT)
-                ]))
-                .validate(&cur_user, &method, None)
-                .await
-            {
-                return Json(Response::fail("no permission.".to_string()));
-            }
-            
-            //添加 TODO insert data with enabled settting false, finally set to true.
-            // 1. add user
-            let user_id=Uuid::new_v4();
-            let new_user=NewUser{
-                user_id: &user_id,
-                description: "test user",
-                permissions:&serde_json::to_string(authorization_policy::DEFAULT_PERMISSIONS_OF_CONSUMER).unwrap(),
-                roles:"[]",
-                enabled:true,
-                create_time: Local::now(),
-                update_time: Local::now(),
-                data: None,
-            };
-            diesel::insert_into(users::table)
-            .values(&new_user)
-            .execute(&mut get_connection())
-            .unwrap();
-            
-            // 2. add login info / login info provider  //TODO cellphone login info provider
-            // 2.1
-            let login_info=NewLoginInfo{
-                login_info_id: &Uuid::new_v4(),
-                login_info_account: &req.cellphone,
-                login_info_type: "Username", //TODO get enum variant value string
-                user_id: &user_id,
-                enabled: true,
-                create_time: Local::now(),
-                update_time: Local::now(),
-            };
-            diesel::insert_into(login_infos::table)
-            .values(&login_info)
-            .execute(&mut get_connection())
-            .unwrap();
-            // 2.2
-            let password = b"123456";
-            let salt = b"randomsalt";
-            let config = argon2::Config::default();
-            let hash = argon2::hash_encoded(password, salt, &config).unwrap();
-            let new_password_login_provider=NewPasswordLoginProvider{
-                user_id: &user_id,
-                password_hash: &hash,
-                enabled:true,
-                create_time: Local::now(),
-                update_time: Local::now(),
-                data:None
-            };
-            diesel::insert_into(password_login_providers::table)
-            .values(&new_password_login_provider)
-            .execute(&mut get_connection())
-            .unwrap();
+pub async fn add_consumer(method: Method, auth: AuthSession<User, Uuid, AxumPgPool, AxumPgPool>,Json(req): Json<ConsumerRequest>)->Result<(),String>{
+    //检查登录
+    let cur_user=auth.current_user.ok_or("no login.".to_string())?;
 
-            // 3. add consumer.
-            let new_consumer=NewConsumer{
-                user_id:  &user_id,
-                consumer_id: &Uuid::new_v4(),
-                cellphone:&req.cellphone,
-                real_name:req.real_name.as_deref(),
-                gender:req.gender.as_deref(),
-                birth_day:req.birth_day,
-                balance:None,
-                enabled:true,
-                create_time: Local::now(),
-                update_time: Local::now(),
-                data: None,
-            };
-            diesel::insert_into(consumers::table)
-            .values(&new_consumer)
-            .execute(&mut get_connection())
-            .unwrap();
+    //检查权限
+    Auth::<User, Uuid, AxumPgPool>::build([Method::POST], false)
+        .requires(Rights::any([
+            Rights::permission(authorization_policy::ACCOUNT)
+        ]))
+        .validate(&cur_user, &method, None)
+        .await
+        .then_some(())
+        .ok_or("no permission.".to_string())?;
 
-            Json(Response::succeed_with_empty())
-        }
-        None=>Json(Response::fail("no login, login first.".to_string()))
-    }
+    //添加 TODO insert data with enabled settting false, finally set to true.
+    // 1. add user
+    let user_id=Uuid::new_v4();
+    let new_user=NewUser{
+        user_id: &user_id,
+        description: "test user",
+        permissions:&serde_json::to_string(authorization_policy::DEFAULT_PERMISSIONS_OF_CONSUMER).unwrap(),
+        roles:"[]",
+        enabled:true,
+        create_time: Local::now(),
+        update_time: Local::now(),
+        data: None,
+    };
+    diesel::insert_into(users::table)
+    .values(&new_user)
+    .execute(&mut get_connection()).map_err(|e|{
+        tracing::error!("{}",e.to_string());
+        e.to_string()
+    })?;
+    
+    // 2. add login info / login info provider  //TODO cellphone login info provider
+    // 2.1
+    let login_info=NewLoginInfo{
+        login_info_id: &Uuid::new_v4(),
+        login_info_account: &req.cellphone,
+        login_info_type: "Username", //TODO get enum variant value string
+        user_id: &user_id,
+        enabled: true,
+        create_time: Local::now(),
+        update_time: Local::now(),
+    };
+    diesel::insert_into(login_infos::table)
+    .values(&login_info)
+    .execute(&mut get_connection()).map_err(|e|{
+        tracing::error!("{}",e.to_string());
+        e.to_string()
+    })?;
+    // 2.2
+    let password = b"123456";
+    let salt = b"randomsalt";
+    let config = argon2::Config::default();
+    let hash = argon2::hash_encoded(password, salt, &config).unwrap();
+    let new_password_login_provider=NewPasswordLoginProvider{
+        user_id: &user_id,
+        password_hash: &hash,
+        enabled:true,
+        create_time: Local::now(),
+        update_time: Local::now(),
+        data:None
+    };
+    diesel::insert_into(password_login_providers::table)
+    .values(&new_password_login_provider)
+    .execute(&mut get_connection()).map_err(|e|{
+        tracing::error!("{}",e.to_string());
+        e.to_string()
+    })?;
+
+    // 3. add consumer.
+    let new_consumer=NewConsumer{
+        user_id:  &user_id,
+        consumer_id: &Uuid::new_v4(),
+        cellphone:&req.cellphone,
+        real_name:req.real_name.as_deref(),
+        gender:req.gender.as_deref(),
+        birth_day:req.birth_day,
+        balance:None,
+        enabled:true,
+        create_time: Local::now(),
+        update_time: Local::now(),
+        data: None,
+    };
+    diesel::insert_into(consumers::table)
+    .values(&new_consumer)
+    .execute(&mut get_connection()).map_err(|e|{
+        tracing::error!("{}",e.to_string());
+        e.to_string()
+    })?;
+
+    Ok(())
 }
 
-pub async fn delete_consumer(Path(id):Path<Uuid>, method: Method, auth: AuthSession<User, Uuid, AxumPgPool, AxumPgPool>)->Json<Response<()>>{
-    match auth.current_user {
-        Some(cur_user) =>  {
-            if !Auth::<User, Uuid, AxumPgPool>::build([Method::DELETE], false)
-                .requires(Rights::any([
-                    Rights::permission(authorization_policy::ACCOUNT)
-                ]))
-                .validate(&cur_user, &method, None)
-                .await
-            {
-                return Json(Response::fail("no permission.".to_string()));
-            }
+pub async fn delete_consumer(Path(id):Path<Uuid>, method: Method, auth: AuthSession<User, Uuid, AxumPgPool, AxumPgPool>)->Result<(),String>{
+    //检查登录
+    let cur_user=auth.current_user.ok_or("no login.".to_string())?;
 
-            // 先不实际删除数据
-            let result=diesel::update(
-                consumers::dsl::consumers
-                .filter(consumers::dsl::consumer_id.eq(id))
-                .filter(consumers::dsl::enabled.eq(true))
-            )
-            .set((
-                    consumers::dsl::enabled.eq(false),
-                    consumers::dsl::update_time.eq(Local::now())
-                ))
-            .execute(&mut get_connection());
+    //检查权限
+    Auth::<User, Uuid, AxumPgPool>::build([Method::DELETE], false)
+        .requires(Rights::any([
+            Rights::permission(authorization_policy::ACCOUNT)
+        ]))
+        .validate(&cur_user, &method, None)
+        .await
+        .then_some(())
+        .ok_or("no permission.".to_string())?;
+    
+    // 先不实际删除数据
+    diesel::update(
+        consumers::dsl::consumers
+        .filter(consumers::dsl::consumer_id.eq(id))
+        .filter(consumers::dsl::enabled.eq(true))
+    )
+    .set((
+            consumers::dsl::enabled.eq(false),
+            consumers::dsl::update_time.eq(Local::now())
+        ))
+    .execute(&mut get_connection()).map_err(|e|{
+        tracing::error!("{}",e.to_string());
+        e.to_string()
+    })?;
 
-            match result {
-                Ok(_)=>Json(Response::succeed_with_empty()),
-                Err(e)=>Json(Response::fail(format!("delete consumber {} failed {}",id,e.to_string()))),
-            }
-        }
-        None=>Json(Response::fail("no login, login first.".to_string()))
-    }
+    Ok(())
 }
 
-pub async fn update_consumer(Path(id):Path<Uuid>, method: Method, auth: AuthSession<User, Uuid, AxumPgPool, AxumPgPool>,Json(req): Json<ConsumerRequest>)->Json<Response<()>>{
-    match auth.current_user {
-        Some(cur_user) =>  {
-            if !Auth::<User, Uuid, AxumPgPool>::build([Method::POST], false)
-                .requires(Rights::any([
-                    Rights::permission(authorization_policy::ACCOUNT)
-                ]))
-                .validate(&cur_user, &method, None)
-                .await
-            {
-                return Json(Response::fail("no permission.".to_string()));
-            }
-            
-            let result=diesel::update(
-                    consumers::dsl::consumers
-                    .filter(consumers::dsl::consumer_id.eq(id))
-                    .filter(consumers::dsl::enabled.eq(true))
-                )
-                .set((
-                        consumers::dsl::cellphone.eq(req.cellphone),
-                        consumers::dsl::real_name.eq(req.real_name),
-                        consumers::dsl::gender.eq(req.gender),
-                        consumers::dsl::birth_day.eq(req.birth_day),
-                        consumers::dsl::update_time.eq(Local::now())
-                    ))
-                .execute(&mut get_connection());
-            
-            match result {
-                Ok(_)=>Json(Response::succeed_with_empty()),
-                Err(e)=>{
-                    tracing::debug!("update consumber {} failed {}",id,e.to_string());
-                    Json(Response::fail(format!("update consumber {} failed {}",id,e.to_string())))
-                },
-            }
-        }
-        None=>Json(Response::fail("no login, login first.".to_string()))
-    }
+pub async fn update_consumer(Path(id):Path<Uuid>, method: Method, auth: AuthSession<User, Uuid, AxumPgPool, AxumPgPool>,Json(req): Json<ConsumerRequest>)->Result<(),String>{
+    //检查登录
+    let cur_user=auth.current_user.ok_or("no login.".to_string())?;
+
+    //检查权限
+    Auth::<User, Uuid, AxumPgPool>::build([Method::POST], false)
+        .requires(Rights::any([
+            Rights::permission(authorization_policy::ACCOUNT)
+        ]))
+        .validate(&cur_user, &method, None)
+        .await
+        .then_some(())
+        .ok_or("no permission.".to_string())?;
+    
+    diesel::update(
+        consumers::dsl::consumers
+        .filter(consumers::dsl::consumer_id.eq(id))
+        .filter(consumers::dsl::enabled.eq(true))
+    )
+    .set((
+            consumers::dsl::cellphone.eq(req.cellphone),
+            consumers::dsl::real_name.eq(req.real_name),
+            consumers::dsl::gender.eq(req.gender),
+            consumers::dsl::birth_day.eq(req.birth_day),
+            consumers::dsl::update_time.eq(Local::now())
+        ))
+    .execute(&mut get_connection()).map_err(|e|{
+        tracing::error!("{}",e.to_string());
+        e.to_string()
+    })?;
+    
+    Ok(())
 }
