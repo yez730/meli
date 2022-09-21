@@ -5,11 +5,11 @@ use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 use crate::{
     schema::*,
-    models::{Account, Merchant, Consumer, NewUser, NewConsumer, NewLoginInfo, NewPasswordLoginProvider, Permission}, authorization_policy, my_date_format
+    models::{Account, Merchant, Consumer, NewUser, NewConsumer, NewLoginInfo, NewPasswordLoginProvider, Permission, Role}, authorization_policy, my_date_format
 };
 use diesel::{
     prelude::*, // for .filter
-    data_types::Cents
+    data_types::Cents, pg::Pg
 }; 
 
 use crate::{models::User, axum_pg_pool::AxumPgPool, utils::{get_connection}, login_managers::{get_login_info, password_login::verify_password}};
@@ -29,27 +29,13 @@ pub struct LoginResponse{
     pub account_id:Uuid,
     pub cellphone:String,
     pub real_name:String,
-    pub permissions:Vec<PermissionResponse>,
-    pub roles:Vec<RoleResponse>,
+    pub permissions:Vec<Permission>,
+    pub roles:Vec<Role>,
     pub merchant_id:Uuid,
     pub merchant_name:String,
 }
 
-#[derive(Serialize)]
-pub struct PermissionResponse{
-    pub permission_code: String,
-    pub permission_name :String,
-    //TODO must have & field count match??
-}
-
-#[derive(Serialize)]
-pub struct RoleResponse{
-    pub role_code: String,
-    pub role_name :String,
-    //TODO must have & field count match??
-}
-
-pub async fn login_by_username(auth: AuthSession<User, Uuid, AxumPgPool, AxumPgPool>,Json(req):Json<LoginRequest>,)->Result<Json<LoginResponse>,String>{ //TODO &'static str or Error
+pub async fn login_by_username(auth: AuthSession<User, Uuid, AxumPgPool, AxumPgPool>,Json(req):Json<LoginRequest>)->Result<Json<LoginResponse>,String>{
     let login_info=get_login_info(req.username).map_err(|e|e.to_string())?;
     
     verify_password(login_info.user_id, req.password).map_err(|e|e.to_string())?;
@@ -69,20 +55,17 @@ pub async fn login_by_username(auth: AuthSession<User, Uuid, AxumPgPool, AxumPgP
         .filter(merchants::dsl::enabled.eq(true))
         .get_result::<Merchant>(&mut get_connection())
         .map_err(|e|e.to_string())?;
-  
     
-    //TODO left join!!??
-    //get permissions/roles.
-    // let permissions=permissions::dsl::permissions
-    //     .filter(permissions::dsl::permission_id.in(user.permissions)) //TODO `in`  / `contains`
-    //     .filter(permissions::dsl::enabled.eq(true))
-    //     .get_results::<Permission>(&mut get_connection())
-    //     .map_err(|e|&*e.to_string())?;
-    // let roles=roles::dsl::roles
-    //     .filter(roles::dsl::role_id.in(user.roles)) //TODO `in`  / `contains`
-    //     .filter(roles::dsl::enabled.eq(true))
-    //     .get_results::<Role>(&mut get_connection())
-    //     .map_err(|e|&*e.to_string())?;
+    let permissions=permissions::dsl::permissions
+        .filter(permissions::dsl::permission_id.eq_any(serde_json::from_str::<Vec<Uuid>>(&user.permissions).unwrap())) 
+        .filter(permissions::dsl::enabled.eq(true))
+        .get_results::<Permission>(&mut get_connection())
+        .map_err(|e|e.to_string())?;
+    let roles=roles::dsl::roles
+        .filter(roles::dsl::role_id.eq_any(serde_json::from_str::<Vec<Uuid>>(&user.roles).unwrap())) 
+        .filter(roles::dsl::enabled.eq(true))
+        .get_results::<Role>(&mut get_connection())
+        .map_err(|e|e.to_string())?;
 
     // set user to cookie
     auth.login_user(user.user_id).await;
@@ -92,8 +75,8 @@ pub async fn login_by_username(auth: AuthSession<User, Uuid, AxumPgPool, AxumPgP
         account_id:account.account_id,
         cellphone:account.cellphone,
         real_name:account.real_name.unwrap_or("no setting".to_string()),
-        permissions:vec![],
-        roles:vec![],
+        permissions,
+        roles,
         merchant_id:merchant.merchant_id,
         merchant_name:merchant.merchant_name,
     };
@@ -141,16 +124,43 @@ pub async fn get_consumers(Query(params):Query<PaginatedListRequest>, method: Me
         .await
         .then_some(())
         .ok_or("no permission.".to_string())?;
+    
+    let get_consumers_query=|p:&PaginatedListRequest|{
+        let mut query=consumers::dsl::consumers.into_boxed();
+        if let Some(key)=p.key.as_ref(){
+            query=query
+                .or_filter(consumers::dsl::cellphone.ilike(format!("{key}%"))) 
+                .or_filter(consumers::dsl::real_name.ilike(format!("{key}%")))
+        }
+        query
+    };
 
-    let _s=params.key.map_or(true, |k|k=="");
-    let merchant=consumers::dsl::consumers
-    // .or_filter(params.key.map_or(true, |k|cellphone.eq(k)))
-    // .or_filter(params.key.map_or(true, |k|email.eq(k)))
-    // .or_filter(params.key.map_or(true, |k|real_name.eq(k)))
-    .get_results::<Consumer>(&mut get_connection());
-    //TODO 分页
-
-    Err("msg.".to_string())
+    let count=get_consumers_query(&params).count().get_result(&mut get_connection()).map_err(|e|e.to_string())?;
+    let data=get_consumers_query(&params)
+        .order(consumers::dsl::create_time.desc())
+        .limit(params.page_size)
+        .offset((params.page_index-1)*params.page_size)
+        .get_results::<Consumer>(&mut get_connection())
+        .map(|v|v.iter().map(|c|ConsumerResponse{
+            user_id:c.user_id,
+            consumer_id:c.consumer_id,
+            cellphone:c.cellphone.clone(),
+            real_name:c.real_name.as_ref().map(|n|n.clone()).unwrap_or("".into()),
+            gender:c.gender.as_ref().map(|g|g.clone()).unwrap_or("".into()),
+            birth_day:c.birth_day.as_ref().map(|b|format!("{:?}",b)).unwrap_or("".into()),//NaiveDate // b.to_string()
+            balance:c.balance.as_ref().map(|c|format!("{:?}",c)).unwrap_or("".into()),//Cents // Cents has no [Serialize]
+            create_time:format!("{:?}",c.create_time.format("%Y-%m-%d %H:%M:%S")),
+            update_time:format!("{:?}",c.update_time.format("%Y-%m-%d %H:%M:%S")),
+            
+        }).collect::<Vec<_>>())
+        .map_err(|e|e.to_string())?;
+    
+    Ok(Json(PaginatedListResponse{
+        page_index:params.page_index,
+        page_size:params.page_size,
+        total_count:count,
+        data:data,
+    }))
 }
 
 pub async fn add_consumer(method: Method, auth: AuthSession<User, Uuid, AxumPgPool, AxumPgPool>,Json(req): Json<ConsumerRequest>)->Result<(),String>{

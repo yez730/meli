@@ -3,20 +3,27 @@ use async_trait::async_trait;
 use axum_sessions_auth::{HasPermission, Authentication};
 use chrono::{Local, DateTime, NaiveDate};
 use diesel::{prelude::*, data_types::Cents};
+use serde::Serialize;
 use uuid::Uuid;
 
 use crate::{schema::*, axum_pg_pool::AxumPgPool};
 
-#[derive(Queryable)]
+#[derive(Queryable,Serialize)]
 pub struct Permission{
+    #[serde(skip_serializing)]
     pub id: i64,
     pub permission_id: Uuid,
     pub permission_code: String,
     pub permission_name :String,
+    #[serde(skip_serializing)]
     pub description: String,
+    #[serde(skip_serializing)]
     pub enabled:bool,
+    #[serde(skip_serializing)]
     pub create_time: chrono::DateTime<Local>,
+    #[serde(skip_serializing)]
     pub update_time: chrono::DateTime<Local>,
+    
     pub data: Option<String>,
 }
 
@@ -148,17 +155,24 @@ pub struct NewConsumer<'a>{
     pub data: Option<&'a str>,
 }
 
-#[derive(Queryable)]
+#[derive(Queryable,Serialize)]
 pub struct Role{
+    #[serde(skip_serializing)]
     pub id: i64,
     pub role_id: Uuid,
     pub role_code: String,
     pub role_name:String,
+    #[serde(skip_serializing)]
     pub permissions:String,
+    #[serde(skip_serializing)]
     pub description:String,
+    #[serde(skip_serializing)]
     pub enabled:bool,
+    #[serde(skip_serializing)]
     pub create_time: chrono::DateTime<Local>,
+    #[serde(skip_serializing)]
     pub update_time: chrono::DateTime<Local>,
+    #[serde(skip_serializing)]
     pub data: Option<String>,
 }
 
