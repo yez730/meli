@@ -1,4 +1,5 @@
 use axum::{http::Method, Json, extract::{Query, Path}};
+use axum_database_sessions::AxumSessionStore;
 use axum_sessions_auth::{Auth, Rights, AuthSession};
 use chrono::{Local, NaiveDate};
 use serde::{Deserialize, Serialize};
@@ -111,7 +112,12 @@ pub struct ConsumerResponse{
     pub update_time: String,//chrono::DateTime<Local>,
 }
 
-pub async fn get_consumers(Query(params):Query<PaginatedListRequest>, method: Method, auth: AuthSession<User, Uuid, AxumPgPool, AxumPgPool>)->Result<Json<PaginatedListResponse<ConsumerResponse>>,String>{
+pub async fn get_consumers(
+    Query(params):Query<PaginatedListRequest>, 
+    method: Method, 
+    auth: AuthSession<User, Uuid, AxumPgPool, AxumPgPool>,
+    store: AxumSessionStore<AxumPgPool>
+)->Result<Json<PaginatedListResponse<ConsumerResponse>>,String>{
     //检查登录
     let cur_user=auth.current_user.ok_or("no login.".to_string())?;
     
@@ -120,13 +126,15 @@ pub async fn get_consumers(Query(params):Query<PaginatedListRequest>, method: Me
         .requires(Rights::any([
             Rights::permission(authorization_policy::ACCOUNT)
         ]))
-        .validate(&cur_user, &method, None)
+        .validate(&cur_user, &method, store.client.as_ref())
         .await
         .then_some(())
         .ok_or("no permission.".to_string())?;
     
     let get_consumers_query=|p:&PaginatedListRequest|{
-        let mut query=consumers::dsl::consumers.into_boxed();
+        let mut query=consumers::dsl::consumers
+            .filter(consumers::dsl::enabled.eq(true))
+            .into_boxed();
         if let Some(key)=p.key.as_ref(){
             query=query
                 .or_filter(consumers::dsl::cellphone.ilike(format!("{key}%"))) 
@@ -139,7 +147,7 @@ pub async fn get_consumers(Query(params):Query<PaginatedListRequest>, method: Me
     let data=get_consumers_query(&params)
         .order(consumers::dsl::create_time.desc())
         .limit(params.page_size)
-        .offset((params.page_index-1)*params.page_size)
+        .offset(params.page_index*params.page_size)
         .get_results::<Consumer>(&mut get_connection())
         .map(|v|v.iter().map(|c|ConsumerResponse{
             user_id:c.user_id,
@@ -147,10 +155,10 @@ pub async fn get_consumers(Query(params):Query<PaginatedListRequest>, method: Me
             cellphone:c.cellphone.clone(),
             real_name:c.real_name.as_ref().map(|n|n.clone()).unwrap_or("".into()),
             gender:c.gender.as_ref().map(|g|g.clone()).unwrap_or("".into()),
-            birth_day:c.birth_day.as_ref().map(|b|format!("{:?}",b)).unwrap_or("".into()),//NaiveDate // b.to_string()
+            birth_day:c.birth_day.as_ref().map(|b|format!("{}",b)).unwrap_or("".into()),//NaiveDate // b.to_string()
             balance:c.balance.as_ref().map(|c|format!("{:?}",c)).unwrap_or("".into()),//Cents // Cents has no [Serialize]
-            create_time:format!("{:?}",c.create_time.format("%Y-%m-%d %H:%M:%S")),
-            update_time:format!("{:?}",c.update_time.format("%Y-%m-%d %H:%M:%S")),
+            create_time:format!("{}",c.create_time.format("%Y-%m-%d %H:%M:%S")),
+            update_time:format!("{}",c.update_time.format("%Y-%m-%d %H:%M:%S")),
             
         }).collect::<Vec<_>>())
         .map_err(|e|e.to_string())?;
@@ -163,7 +171,12 @@ pub async fn get_consumers(Query(params):Query<PaginatedListRequest>, method: Me
     }))
 }
 
-pub async fn add_consumer(method: Method, auth: AuthSession<User, Uuid, AxumPgPool, AxumPgPool>,Json(req): Json<ConsumerRequest>)->Result<(),String>{
+pub async fn add_consumer(
+    method: Method, 
+    auth: AuthSession<User, Uuid, AxumPgPool, AxumPgPool>,
+    store: AxumSessionStore<AxumPgPool>,
+    Json(req): Json<ConsumerRequest>
+)->Result<(),String>{
     //检查登录
     let cur_user=auth.current_user.ok_or("no login.".to_string())?;
 
@@ -172,7 +185,7 @@ pub async fn add_consumer(method: Method, auth: AuthSession<User, Uuid, AxumPgPo
         .requires(Rights::any([
             Rights::permission(authorization_policy::ACCOUNT)
         ]))
-        .validate(&cur_user, &method, None)
+        .validate(&cur_user, &method, store.client.as_ref())
         .await
         .then_some(())
         .ok_or("no permission.".to_string())?;
@@ -258,7 +271,12 @@ pub async fn add_consumer(method: Method, auth: AuthSession<User, Uuid, AxumPgPo
     Ok(())
 }
 
-pub async fn delete_consumer(Path(id):Path<Uuid>, method: Method, auth: AuthSession<User, Uuid, AxumPgPool, AxumPgPool>)->Result<(),String>{
+pub async fn delete_consumer(
+    Path(id):Path<Uuid>, 
+    method: Method, 
+    auth: AuthSession<User, Uuid, AxumPgPool, AxumPgPool>,
+    store: AxumSessionStore<AxumPgPool>,
+)->Result<(),String>{
     //检查登录
     let cur_user=auth.current_user.ok_or("no login.".to_string())?;
 
@@ -267,7 +285,7 @@ pub async fn delete_consumer(Path(id):Path<Uuid>, method: Method, auth: AuthSess
         .requires(Rights::any([
             Rights::permission(authorization_policy::ACCOUNT)
         ]))
-        .validate(&cur_user, &method, None)
+        .validate(&cur_user, &method, store.client.as_ref())
         .await
         .then_some(())
         .ok_or("no permission.".to_string())?;
@@ -290,7 +308,13 @@ pub async fn delete_consumer(Path(id):Path<Uuid>, method: Method, auth: AuthSess
     Ok(())
 }
 
-pub async fn update_consumer(Path(id):Path<Uuid>, method: Method, auth: AuthSession<User, Uuid, AxumPgPool, AxumPgPool>,Json(req): Json<ConsumerRequest>)->Result<(),String>{
+pub async fn update_consumer(
+    Path(id):Path<Uuid>, 
+    method: Method, 
+    auth: AuthSession<User, Uuid, AxumPgPool, AxumPgPool>,
+    store: AxumSessionStore<AxumPgPool>,
+    Json(req): Json<ConsumerRequest>
+)->Result<(),String>{
     //检查登录
     let cur_user=auth.current_user.ok_or("no login.".to_string())?;
 
@@ -299,7 +323,7 @@ pub async fn update_consumer(Path(id):Path<Uuid>, method: Method, auth: AuthSess
         .requires(Rights::any([
             Rights::permission(authorization_policy::ACCOUNT)
         ]))
-        .validate(&cur_user, &method, None)
+        .validate(&cur_user, &method, store.client.as_ref())
         .await
         .then_some(())
         .ok_or("no permission.".to_string())?;

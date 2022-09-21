@@ -30,8 +30,11 @@ pub mod password_login{
             .filter(password_login_providers::dsl::enabled.eq(true))
             .get_result::<PasswordLoginProvider>(&mut get_connection())?;
            
-        argon2::verify_encoded(&provider.password_hash, password.as_bytes()).map_err(|e|anyhow!(e.to_string()))?;
-        
+        let verified=argon2::verify_encoded(&provider.password_hash, password.as_bytes()).map_err(|e|anyhow!(e.to_string()))?;
+        if !verified{
+            return Err(anyhow!("密码验证失败"));
+        }
+
         Ok(())
     }
 }

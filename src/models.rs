@@ -89,10 +89,26 @@ pub struct NewUser<'a>{
 // This is only used if you want to use Token based Authentication checks
 #[async_trait]
 impl HasPermission<AxumPgPool> for User {
-    async fn has(&self, perm: &str, _pool: &Option<&AxumPgPool>) -> bool {
-        let rights:Vec<&str>=serde_json::from_str(&self.permissions).unwrap();
-
-        rights.contains(&&perm)
+    async fn has(&self, perm: &str, pool: &Option<&AxumPgPool>) -> bool {
+        match pool.unwrap().connection.lock() {
+            Ok(mut conn)=>{
+                match permissions::dsl::permissions
+                .filter(permissions::dsl::permission_id.eq_any(serde_json::from_str::<Vec<Uuid>>(&self.permissions).unwrap())) 
+                .filter(permissions::dsl::enabled.eq(true))
+                .select(permissions::dsl::permission_code)
+                .get_results::<String>(&mut *conn) {
+                    Ok(rights)=>rights.contains(&perm.to_string()),
+                    Err(e)=>{
+                        tracing::error!("get conn error {}",e);
+                        false
+                    }
+                }
+            }
+            Err(e)=>{
+                tracing::error!("get conn error {}",e);
+                false
+            }
+        }
     }
 }
 

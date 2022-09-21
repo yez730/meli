@@ -38,11 +38,18 @@ pub fn create_or_update_super_user_account(conn:&mut PgConnection){
     // 2.1 insert user
     let mut perms=authorization_policy::DEFAULT_PERMISSIONS_OF_MERCHANT_ACCOUNT.to_vec();
     perms.push(authorization_policy::ACCOUNT); //商户用户权限
+    
+    let perm_ids=permissions::dsl::permissions
+    .filter(permissions::dsl::permission_code.eq_any(perms)) 
+    .filter(permissions::dsl::enabled.eq(true))
+    .select(permissions::dsl::permission_id)
+    .get_results::<Uuid>(conn).unwrap();
+
     let user_id=Uuid::new_v4();
     let new_user=NewUser{
         user_id: &user_id,
         description: "test user",
-        permissions:&serde_json::to_string(&perms).unwrap(),
+        permissions:&serde_json::to_string(&perm_ids).unwrap(),
         roles:"[]",
         enabled:true,
         create_time: Local::now(),
