@@ -122,8 +122,7 @@ pub fn create_or_update_super_user_account(conn:&mut PgConnection){
     .unwrap();
 }
 
-#[allow(dead_code)]
-mod my_date_format {
+pub mod my_option_date_format {
     use chrono::{DateTime, Local, TimeZone};
     use serde::{self, Deserialize, Serializer, Deserializer};
 
@@ -156,11 +155,39 @@ mod my_date_format {
     }
 }
 
+pub mod my_date_format {
+    use chrono::{DateTime, TimeZone, Local};
+    use serde::{self, Deserialize, Serializer, Deserializer};
+
+    const FORMAT: &'static str = "%Y-%m-%d %H:%M:%S";
+
+    pub fn serialize<S>(
+        date: &DateTime<Local>,
+        serializer: S,
+    ) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        let s = format!("{}", date.format(FORMAT));
+        serializer.serialize_str(&s)
+    }
+
+    pub fn deserialize<'de, D>(
+        deserializer: D,
+    ) -> Result<DateTime<Local>, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let s = String::deserialize(deserializer)?;
+        Local.datetime_from_str(&s, FORMAT).map_err(serde::de::Error::custom)
+    }
+}
+
 #[cfg(test)]
 mod test{
     use serde::{Serialize,Deserialize};
     use chrono::{DateTime, NaiveDate};
-    use super::{*,my_date_format};
+    use super::{*,my_option_date_format};
 
     #[test]
     #[ignore]
@@ -173,7 +200,7 @@ mod test{
         a:String,
         b:Option<String>,
 
-        #[serde(default, with = "my_date_format")]
+        #[serde(default, with = "my_option_date_format")]
         c:Option<DateTime<Local>>,
     }
     #[test]

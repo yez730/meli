@@ -25,7 +25,7 @@ diesel::table! {
         real_name -> Nullable<Varchar>,
         gender -> Nullable<Varchar>,
         birth_day -> Nullable<Date>,
-        balance -> Nullable<Money>,
+        balance -> Money,
         enabled -> Bool,
         create_time -> Timestamptz,
         update_time -> Timestamptz,

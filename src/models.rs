@@ -1,29 +1,30 @@
 use anyhow::{anyhow,Error};
 use async_trait::async_trait;
 use axum_sessions_auth::{HasPermission, Authentication};
-use chrono::{Local, DateTime, NaiveDate};
+use chrono::{Local, NaiveDate};
 use diesel::{prelude::*, data_types::Cents};
 use serde::Serialize;
 use uuid::Uuid;
 
-use crate::{schema::*, axum_pg_pool::AxumPgPool};
+use crate::{schema::*, axum_pg_pool::AxumPgPool, my_date_format};
 
 #[derive(Queryable,Serialize)]
 pub struct Permission{
-    #[serde(skip_serializing)]
+    #[serde(skip)]
     pub id: i64,
+
     pub permission_id: Uuid,
     pub permission_code: String,
     pub permission_name :String,
-    #[serde(skip_serializing)]
     pub description: String,
-    #[serde(skip_serializing)]
+
+    #[serde(skip)]
     pub enabled:bool,
-    #[serde(skip_serializing)]
+    #[serde(skip)]
     pub create_time: chrono::DateTime<Local>,
-    #[serde(skip_serializing)]
+    #[serde(skip)]
     pub update_time: chrono::DateTime<Local>,
-    
+    #[serde(skip)]
     pub data: Option<String>,
 }
 
@@ -60,16 +61,27 @@ pub struct NewSession<'a> {
     pub update_time: chrono::DateTime<Local>,
 }
 
-#[derive(Queryable,Clone, Debug)]
+#[derive(Queryable,Serialize,Clone, Debug)]
 pub struct User{
+    #[serde(skip)]
     pub id: i64,
+
     pub user_id: Uuid,
     pub description: String,
+    #[serde(skip)]
     pub permissions: String,
+    #[serde(skip)]
     pub roles: String,
+    #[serde(skip)]
     pub enabled:bool,
+
+    #[serde(skip)]
     pub create_time: chrono::DateTime<Local>,
+
+    #[serde(skip)]
     pub update_time: chrono::DateTime<Local>,
+
+    #[serde(skip)]
     pub data: Option<String>,
 }
 
@@ -139,20 +151,35 @@ impl Authentication<User, Uuid, AxumPgPool> for User {
     }
 }
 
-#[derive(Queryable)]
+#[derive(Queryable,Serialize)]
 pub struct Consumer{
+    #[serde(skip)]
     pub id: i64,
+
     pub user_id: Uuid,
     pub consumer_id: Uuid,
     pub cellphone:String,
     pub real_name:Option<String>,
     pub gender:Option<String>,
     pub birth_day:Option<NaiveDate>,
-    pub balance:Option<Cents>,
+
+    #[serde(serialize_with = "custom_serialize")]
+    pub balance:Cents,
+
+    #[serde(skip)]
     pub enabled:bool,
+    
+    #[serde(with = "my_date_format")]
     pub create_time: chrono::DateTime<Local>,
+    #[serde(with = "my_date_format")]
     pub update_time: chrono::DateTime<Local>,
+
+    #[serde(skip)]
     pub data: Option<String>,
+}
+
+fn custom_serialize<S: serde::Serializer>(value: &Cents, ser: S) -> Result<S::Ok, S::Error> {
+    ser.serialize_str(&format!("{:?}",value))
 }
 
 #[derive(Insertable)]
@@ -164,7 +191,7 @@ pub struct NewConsumer<'a>{
     pub real_name:Option<&'a str>,
     pub gender:Option<&'a str>,
     pub birth_day:Option<NaiveDate>,
-    pub balance:Option<Cents>, //TODO not null
+    pub balance:Cents,
     pub enabled:bool,
     pub create_time: chrono::DateTime<Local>,
     pub update_time: chrono::DateTime<Local>,
@@ -173,37 +200,47 @@ pub struct NewConsumer<'a>{
 
 #[derive(Queryable,Serialize)]
 pub struct Role{
-    #[serde(skip_serializing)]
+    #[serde(skip)]
     pub id: i64,
+
     pub role_id: Uuid,
     pub role_code: String,
     pub role_name:String,
-    #[serde(skip_serializing)]
+
+    #[serde(skip)]
     pub permissions:String,
-    #[serde(skip_serializing)]
+    #[serde(skip)]
     pub description:String,
-    #[serde(skip_serializing)]
+    #[serde(skip)]
     pub enabled:bool,
-    #[serde(skip_serializing)]
+    #[serde(skip)]
     pub create_time: chrono::DateTime<Local>,
-    #[serde(skip_serializing)]
+    #[serde(skip)]
     pub update_time: chrono::DateTime<Local>,
-    #[serde(skip_serializing)]
+    #[serde(skip)]
     pub data: Option<String>,
 }
 
-#[derive(Queryable)]
+#[derive(Queryable,Serialize)]
 pub struct Account{
+    #[serde(skip)]
     pub id: i64,
     pub user_id: Uuid,
     pub account_id: Uuid,
     pub merchant_id: Uuid,
+
     pub cellphone:String,
     pub email:Option<String>,
     pub real_name:Option<String>,
+
+    #[serde(skip)]
     pub enabled:bool,
+    #[serde(with = "my_date_format")]
     pub create_time: chrono::DateTime<Local>,
+    #[serde(with = "my_date_format")]
     pub update_time: chrono::DateTime<Local>,
+
+    #[serde(skip)]
     pub data: Option<String>,
 }
 
@@ -223,16 +260,24 @@ pub struct NewAccount<'a>{
 }
 
 
-#[derive(Queryable)]
+#[derive(Queryable,Serialize)]
 pub struct Merchant{
+    #[serde(skip)]
     pub id: i64,
+
     pub merchant_id: Uuid,
     pub merchant_name:String,
     pub company_name:Option<String>,
     pub credential_no:Option<String>,
+
+    #[serde(skip)]
     pub enabled:bool,
+    #[serde(with = "my_date_format")]
     pub create_time: chrono::DateTime<Local>,
+    #[serde(with = "my_date_format")]
     pub update_time: chrono::DateTime<Local>,
+
+    #[serde(skip)]
     pub data: Option<String>,
 }
 
