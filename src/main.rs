@@ -30,6 +30,7 @@ async fn main(){
     let app=Router::new()
         .route("/login", post(login_by_username))
         .route("/logout", get(logout))
+        .route("/identity", get(get_current_identity))
         .route("/consumers", get(get_consumers).post(add_consumer))
         .route("/consumers/:c_id", get(get_consumer).post(update_consumer).delete(delete_consumer))
         .layer(AuthSessionLayer::<User, Uuid, AxumPgPool, AxumPgPool>::new(Some(axum_pg_pool.clone())).with_config(auth_config))

@@ -58,15 +58,21 @@ pub async fn login_by_username(auth: AuthSession<User, Uuid, AxumPgPool, AxumPgP
             .filter(users::dsl::enabled.eq(true))
             .get_result::<User>(&mut get_connection()).map_err(|e|(StatusCode::INTERNAL_SERVER_ERROR,e.to_string()))?;
 
-    let account_merchant=accounts::table
+    let account=accounts::table
         .inner_join(merchants::table.on(accounts::merchant_id.eq(merchants::merchant_id)))
-        .filter(accounts::dsl::user_id.eq(login_info.user_id))
+        .filter(accounts::dsl::user_id.eq(user.user_id))
         .filter(accounts::dsl::enabled.eq(true))
-        .get_result::<(Account,Merchant)>(&mut get_connection()).map_err(|e|(StatusCode::INTERNAL_SERVER_ERROR,e.to_string()))?;
-    let account_reponse=AccountResonse{
-        account:account_merchant.0,
-        merchant:account_merchant.1,
-    };
+        .get_result::<(Account,Merchant)>(&mut get_connection())
+        .ok() //TODO track error
+        .map(|a_m| AccountResonse{
+            account:a_m.0,
+            merchant:a_m.1,
+        });
+    let consumer=consumers::dsl::consumers
+        .filter(consumers::dsl::user_id.eq(user.user_id))
+        .filter(consumers::dsl::enabled.eq(true))
+        .get_result::<Consumer>(&mut get_connection())
+        .ok();
     
     let permissions=permissions::dsl::permissions
         .filter(permissions::dsl::permission_id.eq_any(serde_json::from_str::<Vec<Uuid>>(&user.permissions).unwrap())) 
@@ -84,11 +90,10 @@ pub async fn login_by_username(auth: AuthSession<User, Uuid, AxumPgPool, AxumPgP
     auth.login_user(user_response.user.user_id).await;
     auth.remember_user(true).await;
 
-
     let identity=Identity{
         user:user_response,
-        account:Some(account_reponse),
-        consumer:None,
+        account:account,
+        consumer:consumer,
     };
 
     Ok(Json(identity))
@@ -99,6 +104,47 @@ pub async fn logout(auth: AuthSession<User, Uuid, AxumPgPool, AxumPgPool>){
         auth.logout_user().await;
     }
 }
+
+pub async fn get_current_identity(auth: AuthSession<User, Uuid, AxumPgPool, AxumPgPool>)->Result<Json<Identity>,(StatusCode,String)>{
+    let user=auth.current_user.ok_or((StatusCode::INTERNAL_SERVER_ERROR,"no login".to_string()))?;
+   
+    let account=accounts::table
+        .inner_join(merchants::table.on(accounts::merchant_id.eq(merchants::merchant_id)))
+        .filter(accounts::dsl::user_id.eq(user.user_id))
+        .filter(accounts::dsl::enabled.eq(true))
+        .get_result::<(Account,Merchant)>(&mut get_connection())
+        .ok() //TODO track error
+        .map(|a_m| AccountResonse{
+            account:a_m.0,
+            merchant:a_m.1,
+        });
+    let consumer=consumers::dsl::consumers
+        .filter(consumers::dsl::user_id.eq(user.user_id))
+        .filter(consumers::dsl::enabled.eq(true))
+        .get_result::<Consumer>(&mut get_connection())
+        .ok();
+
+    let permissions=permissions::dsl::permissions
+        .filter(permissions::dsl::permission_id.eq_any(serde_json::from_str::<Vec<Uuid>>(&user.permissions).unwrap())) 
+        .filter(permissions::dsl::enabled.eq(true))
+        .get_results::<Permission>(&mut get_connection())
+        .map_err(|e|(StatusCode::INTERNAL_SERVER_ERROR,e.to_string()))?;
+    let roles=roles::dsl::roles
+        .filter(roles::dsl::role_id.eq_any(serde_json::from_str::<Vec<Uuid>>(&user.roles).unwrap())) 
+        .filter(roles::dsl::enabled.eq(true))
+        .get_results::<Role>(&mut get_connection())
+        .map_err(|e|(StatusCode::INTERNAL_SERVER_ERROR,e.to_string()))?;
+    let user_response=UserResponse {user,permissions,roles};
+
+    let identity=Identity{
+        user:user_response,
+        account:account,
+        consumer:consumer,
+    };
+
+    Ok(Json(identity))
+}
+
 
 #[derive(Deserialize)]
 pub struct ConsumerRequest{
@@ -275,7 +321,7 @@ pub async fn delete_consumer(
         .ok_or((StatusCode::INTERNAL_SERVER_ERROR,"no permission".to_string()))?;
     
     // 先不实际删除数据
-    diesel::update(
+    let count=diesel::update(
         consumers::dsl::consumers
         .filter(consumers::dsl::consumer_id.eq(id))
         .filter(consumers::dsl::enabled.eq(true))
@@ -288,6 +334,10 @@ pub async fn delete_consumer(
         tracing::error!("{}",e.to_string());
         (StatusCode::INTERNAL_SERVER_ERROR,e.to_string())
     })?;
+
+    if count!=1 {
+        return Err((StatusCode::NOT_FOUND,"data not exists".to_string()));
+    }
 
     Ok(())
 }
@@ -351,7 +401,6 @@ pub async fn get_consumer(
         .then_some(())
         .ok_or((StatusCode::INTERNAL_SERVER_ERROR,"no permission".to_string()))?;
     
-    //TODO left join get Merchant
     let consumer=consumers::dsl::consumers
         .filter(consumers::dsl::consumer_id.eq(id))
         .filter(consumers::dsl::enabled.eq(true))
