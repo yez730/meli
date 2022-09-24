@@ -106,7 +106,7 @@ pub async fn logout(auth: AuthSession<User, Uuid, AxumPgPool, AxumPgPool>){
 }
 
 pub async fn get_current_identity(auth: AuthSession<User, Uuid, AxumPgPool, AxumPgPool>)->Result<Json<Identity>,(StatusCode,String)>{
-    let user=auth.current_user.ok_or((StatusCode::INTERNAL_SERVER_ERROR,"no login".to_string()))?;
+    let user=auth.current_user.ok_or((StatusCode::UNAUTHORIZED,"no login".to_string()))?;
    
     let account=accounts::table
         .inner_join(merchants::table.on(accounts::merchant_id.eq(merchants::merchant_id)))
