@@ -1,17 +1,13 @@
 use std::collections::HashMap;
-use std::sync::{Arc, Mutex};
 
 use anyhow::{anyhow, Ok};
 use async_trait::async_trait;
 use axum_session_middleware::database_pool::{AxumDatabasePool,self};
-use chrono::DateTime;
-use chrono::{Local, Utc,offset::TimeZone};
-use serde_json::{Value, json};
+use chrono::Local;
 use uuid::Uuid;
 use crate::models::{NewSession, Session};
 use crate::schema::*;
 
-use diesel::dsl::now;
 use diesel::PgConnection;
 use diesel::prelude::*;
 use diesel::r2d2::ConnectionManager;

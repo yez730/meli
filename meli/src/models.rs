@@ -1,7 +1,5 @@
-use anyhow::{anyhow,Error};
 use async_trait::async_trait;
 use axum_session_authentication_middleware::{ user as auth_user,session::Authentication};
-use axum_session_middleware::database_pool::AxumDatabasePool;
 use chrono::{Local, NaiveDate};
 use diesel::{prelude::*, data_types::Cents};
 use serde::Serialize;

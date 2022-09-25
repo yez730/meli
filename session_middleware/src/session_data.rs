@@ -1,7 +1,6 @@
 use std::collections::HashMap;
 
 use chrono::{DateTime, Local, Duration};
-use serde::Serialize;
 use uuid::Uuid;
 
 #[derive(Debug,Clone)]

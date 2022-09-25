@@ -1,4 +1,6 @@
 [workspace]
 members =[
-    "meli","session_middleware","session_authentication_middleware"
+    "meli",
+    "session_middleware",
+    "session_authentication_middleware"
 ]

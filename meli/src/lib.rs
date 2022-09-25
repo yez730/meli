@@ -13,8 +13,6 @@ use uuid::Uuid;
 use diesel::PgConnection;
 use diesel::prelude::*;
 
-use crate::login_managers::LoginInfoType;
-
 pub fn create_or_update_super_user_account(conn:&mut PgConnection){
     use crate::schema::*;
 
@@ -249,16 +247,5 @@ mod test{
         // let input1=serde_json::from_str::<Input3>(json1).unwrap();
         // assert_eq!(input1.b,Some(NaiveDate::from_ymd(2022, 4, 20)));
 
-    }
-
-    fn fuck<F,P>(f:F)
-    where
-    F:FnOnce(P) -> String,
-    P:Ptrait
-    {
-        
-    }
-    trait Ptrait {
-        fn get_string()->String;
     }
 }

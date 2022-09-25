@@ -1,6 +1,6 @@
 pub const SESSIONID:&str="X-SID";
 
-pub mod SessionKeys{
-    pub const Identity:&str="identity";
-    pub const UserId:&str = "userId";
+pub mod session_keys{
+    pub const IDENTITY:&str="identity";
+    pub const USER_ID:&str = "userId";
 }

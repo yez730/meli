@@ -1,6 +1,6 @@
-use std::{net::SocketAddr, sync::{Arc, Mutex}, str::FromStr};
+use std::{net::SocketAddr};
 
-use axum::{Router, routing::{get, post}, http::{Method, header}};
+use axum::{Router, routing::{get, post}};
 use axum_session_authentication_middleware::layer::AuthSessionLayer;
 use axum_session_middleware::{layer::AxumSessionLayer, session_store::AxumSessionStore};
 use tower_http::{trace::TraceLayer, cors::Any};
@@ -8,7 +8,6 @@ use tower_http::cors::CorsLayer;
 use tracing_subscriber::{layer::SubscriberExt,util::SubscriberInitExt};
 
 use meli_backend::{ axum_pg_pool::AxumPgPool, models::User, utils::get_connection_pool, handlers::{user_handler::*}};
-use uuid::Uuid;
 
 #[tokio::main]
 async fn main(){

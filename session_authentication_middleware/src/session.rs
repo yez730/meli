@@ -1,6 +1,6 @@
 use async_trait::async_trait;
 use axum_core::extract::FromRequestParts;
-use axum_session_middleware::{database_pool::AxumDatabasePool, session::AxumSession, constants::SessionKeys};
+use axum_session_middleware::{database_pool::AxumDatabasePool, session::AxumSession, constants::session_keys};
 use http::{self, request::Parts, StatusCode};
 use uuid::Uuid;
 use std::{fmt::{self, Debug}, marker::PhantomData, sync::{Arc, Mutex}};
@@ -62,7 +62,7 @@ where
             tracing::error!("refresh_identity identity_str: {:?}","identity_str");
             if let Ok(identity_str)=identity_str{
                 tracing::error!("begin Ok(identity_str)");
-                session.set_data(SessionKeys::Identity.to_string(), identity_str); //TODO SessionKeys::Identity.to_string() ??????
+                session.set_data(session_keys::IDENTITY.to_string(), identity_str); //TODO SessionKeys::Identity.to_string() ??????
                 tracing::error!("after Ok(identity_str)");
             }
         }

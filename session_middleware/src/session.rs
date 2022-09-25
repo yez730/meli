@@ -5,7 +5,7 @@ use std::{
     fmt::Debug,
 };
 
-use crate::{session_data::AxumSessionData, database_pool::AxumDatabasePool, session_store::AxumSessionStore, constants::{ SESSIONID, SessionKeys}};
+use crate::{session_data::AxumSessionData, database_pool::AxumDatabasePool, session_store::AxumSessionStore, constants::session_keys};
 
 #[derive(Clone,Debug)]
 pub struct AxumSession<T>
@@ -128,7 +128,7 @@ where
     }
 
     pub fn get_identity_str(&self)->&str{
-        self.session_data.data[SessionKeys::Identity].as_str()
+        self.session_data.data[session_keys::IDENTITY].as_str()
     }
 
     pub fn set_data(&mut self,key:String,val:String){

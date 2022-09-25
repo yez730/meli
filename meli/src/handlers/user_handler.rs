@@ -1,11 +1,11 @@
-use axum::{http::{Method, StatusCode}, Json, extract::{Query, Path, State}};
+use axum::{http::StatusCode, Json, extract::{Query, Path, State}};
 use axum_session_authentication_middleware::session::AuthSession;
 use chrono::{Local, NaiveDate};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 use crate::{
     schema::*,
-    models::{Account, Merchant, Consumer, NewUser, NewConsumer, NewLoginInfo, NewPasswordLoginProvider, Permission, Role}, authorization_policy, my_date_format
+    models::{Account, Merchant, Consumer, NewUser, NewConsumer, NewLoginInfo, NewPasswordLoginProvider}, authorization_policy
 };
 use diesel::{
     prelude::*, // for .filter
@@ -98,11 +98,11 @@ pub async fn get_consumers(
     auth: AuthSession<AxumPgPool, AxumPgPool,User>,
 )->Result<Json<PaginatedListResponse<Consumer>>,(StatusCode,String)>{
     //检查登录
-    let identity=auth.identity.as_ref().ok_or((StatusCode::UNAUTHORIZED,"no login".to_string()))?;
+    let _=auth.identity.as_ref().ok_or((StatusCode::UNAUTHORIZED,"no login".to_string()))?;
 
     //检查权限
     auth.require_permissions(vec![authorization_policy::ACCOUNT])
-        .map_err(|e|(StatusCode::INTERNAL_SERVER_ERROR,"no permission".to_string()))?;
+        .map_err(|_|(StatusCode::INTERNAL_SERVER_ERROR,"no permission".to_string()))?;
     
     let mut conn=pool.pool.get().unwrap();//TODO error
 
@@ -140,11 +140,11 @@ pub async fn add_consumer(
     Json(req): Json<ConsumerRequest>
 )->Result<(),(StatusCode,String)>{
     //检查登录
-    let identity=auth.identity.as_ref().ok_or((StatusCode::UNAUTHORIZED,"no login".to_string()))?;
+    let _=auth.identity.as_ref().ok_or((StatusCode::UNAUTHORIZED,"no login".to_string()))?;
 
     //检查权限
     auth.require_permissions(vec![authorization_policy::ACCOUNT])
-        .map_err(|e|(StatusCode::INTERNAL_SERVER_ERROR,"no permission".to_string()))?;
+        .map_err(|_|(StatusCode::INTERNAL_SERVER_ERROR,"no permission".to_string()))?;
         
     let mut conn=pool.pool.get().unwrap();//TODO error
     
@@ -232,15 +232,14 @@ pub async fn add_consumer(
 pub async fn delete_consumer(
     State(pool):State<AxumPgPool>,
     Path(id):Path<Uuid>, 
-    method: Method, 
     auth: AuthSession<AxumPgPool, AxumPgPool,User>,
 )->Result<(),(StatusCode,String)>{
     //检查登录
-    let identity=auth.identity.as_ref().ok_or((StatusCode::UNAUTHORIZED,"no login".to_string()))?;
+    let _=auth.identity.as_ref().ok_or((StatusCode::UNAUTHORIZED,"no login".to_string()))?;
 
     //检查权限
     auth.require_permissions(vec![authorization_policy::ACCOUNT])
-        .map_err(|e|(StatusCode::INTERNAL_SERVER_ERROR,"no permission".to_string()))?;
+        .map_err(|_|(StatusCode::INTERNAL_SERVER_ERROR,"no permission".to_string()))?;
     
     let mut conn=pool.pool.get().unwrap();//TODO error
 
@@ -273,11 +272,11 @@ pub async fn update_consumer(
     Json(req): Json<ConsumerRequest>
 )->Result<(),(StatusCode,String)>{
     //检查登录
-    let identity=auth.identity.as_ref().ok_or((StatusCode::UNAUTHORIZED,"no login".to_string()))?;
+    let _=auth.identity.as_ref().ok_or((StatusCode::UNAUTHORIZED,"no login".to_string()))?;
 
     //检查权限
     auth.require_permissions(vec![authorization_policy::ACCOUNT])
-        .map_err(|e|(StatusCode::INTERNAL_SERVER_ERROR,"no permission".to_string()))?;
+        .map_err(|_|(StatusCode::INTERNAL_SERVER_ERROR,"no permission".to_string()))?;
    
     let mut conn=pool.pool.get().unwrap();//TODO error
 
@@ -307,11 +306,11 @@ pub async fn get_consumer(
     auth: AuthSession<AxumPgPool, AxumPgPool,User>,
 )->Result<Json<Consumer>,(StatusCode,String)>{
     //检查登录
-    let identity=auth.identity.as_ref().ok_or((StatusCode::UNAUTHORIZED,"no login".to_string()))?;
+    let _=auth.identity.as_ref().ok_or((StatusCode::UNAUTHORIZED,"no login".to_string()))?;
 
     //检查权限
     auth.require_permissions(vec![authorization_policy::ACCOUNT])
-        .map_err(|e|(StatusCode::INTERNAL_SERVER_ERROR,"no permission".to_string()))?;
+        .map_err(|_|(StatusCode::INTERNAL_SERVER_ERROR,"no permission".to_string()))?;
 
     let mut conn=pool.pool.get().unwrap();//TODO error  
     

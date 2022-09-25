@@ -2,13 +2,12 @@
 use std::env;
 
 use diesel::PgConnection;
-use diesel::prelude::*;
 use diesel::r2d2::ConnectionManager;
 use diesel::r2d2::Pool;
 use dotenvy::dotenv;
 
 pub fn get_connection_pool()->Pool<ConnectionManager<PgConnection>> {
-    dotenv().ok();
+    dotenv().expect("Cannot find .env file");
 
     let database_url=env::var("DATABASE_URL").expect("DATABASE_URL must be set");
     
