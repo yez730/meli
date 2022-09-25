@@ -17,12 +17,10 @@ async fn main(){
         ))
         .with(tracing_subscriber::fmt::layer())
         .init();
-    tracing::error!("get_connection_pool");
 
     let axum_pg_pool=AxumPgPool{
         pool:get_connection_pool()
     };
-    tracing::error!("tracing_subscriber");
 
     let app=Router::with_state(axum_pg_pool.clone())
         .route("/login", post(login_by_username))

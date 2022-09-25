@@ -59,14 +59,10 @@ where
         //TODO 新user_id / 权限变更 时， refresh_identity
         if let Some(user_id) =session.get_logined_user_id(){
             let identity_str=serde_json::to_string(&User::load_identity(user_id,self.database_pool.clone()));
-            tracing::error!("refresh_identity identity_str: {:?}","identity_str");
             if let Ok(identity_str)=identity_str{
-                tracing::error!("begin Ok(identity_str)");
                 session.set_data(session_keys::IDENTITY.to_string(), identity_str); //TODO SessionKeys::Identity.to_string() ??????
-                tracing::error!("after Ok(identity_str)");
             }
         }
-        tracing::error!("after refresh_identity");
     }
 
     pub async fn sign_out(&mut self){

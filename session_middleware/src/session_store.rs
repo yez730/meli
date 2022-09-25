@@ -48,7 +48,6 @@ where
                 expiry_time:sess.expiry_time,
                 data:sess.data,
             };
-            tracing::error!("begin insert database");
             self.database_pool.store(&session_data).await?;
         } else{
             self.memory_store.insert(session_data.session_id, session_data.clone());

@@ -79,7 +79,6 @@ where
                 session.get_logined_user_id()
                 .map(|_|serde_json::from_str::<Identity>(session.get_identity_str()).unwrap())
             };
-            tracing::error!("identity---------{:?}",identity);
             let auth_session:AuthSession<SessionP,AuthP,User> = AuthSession {
                 phantom_user:PhantomData::default(),
                 identity,

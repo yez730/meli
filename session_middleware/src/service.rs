@@ -60,7 +60,6 @@ where
             let session_id=req.headers().get(SESSIONID).and_then(|id|id.to_str().ok());
            
             let session = AxumSession::load_or_init(&store, session_id).await.unwrap_or_else(|e|{
-                tracing::error!("load_or_init error: {}",e);
 
                 let session_id=SessionId::init_session_id();
                 
@@ -71,7 +70,6 @@ where
                     is_modified:false,
                 }
             });
-            // tracing::error!("session-------------{:?}",session);
             store.memory_store.retain(|_k, v|  v.expiry_time>Local::now());
 
             let session=Arc::new(Mutex::new(session)); // 在res返回中取不到同一个Extension
@@ -80,7 +78,6 @@ where
 
             let mut res = ready_inner.call(req).await?.map(body::boxed);
 
-            tracing::error!("got res");
             //TODO tokio mutex -> 跨await引用  safe
             let session=Arc::clone(&session);
             
