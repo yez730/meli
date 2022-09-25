@@ -4,15 +4,11 @@ use axum_core::{
     BoxError,
 };
 use bytes::Bytes;
-use cookie::{Cookie, CookieJar, Key};
 use futures::future::BoxFuture;
 use http::{
-    self,
-    header::{COOKIE, SET_COOKIE},
-    HeaderMap, Request, HeaderValue,
+    self,Request, HeaderValue,
 };
 use http_body::Body as HttpBody;
-use uuid::Uuid;
 use std::{
     boxed::Box,
     convert::Infallible,
@@ -21,9 +17,9 @@ use std::{
     task::{Context, Poll},
 };
 use tower_service::Service;
-use chrono::{Local, DateTime};
+use chrono::{Local};
 
-use crate::{database_pool::AxumDatabasePool, session_store::AxumSessionStore, session::{AxumSession, SessionId}, session_data::AxumSessionData, constants::{SESSIONID, USERID}};
+use crate::{database_pool::AxumDatabasePool, session_store::AxumSessionStore, session::{AxumSession, SessionId}, session_data::AxumSessionData, constants::{SESSIONID}};
 
 #[derive(Clone)]
 pub struct AxumSessionService<S, T>

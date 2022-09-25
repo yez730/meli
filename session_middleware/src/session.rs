@@ -5,29 +5,29 @@ use std::{
     fmt::Debug,
 };
 
-use crate::{session_data::AxumSessionData, database_pool::AxumDatabasePool, session_store::AxumSessionStore, constants::{USERID, SESSIONID, SessionKeys}};
+use crate::{session_data::AxumSessionData, database_pool::AxumDatabasePool, session_store::AxumSessionStore, constants::{ SESSIONID, SessionKeys}};
 
 #[derive(Clone,Debug)]
 pub struct AxumSession<T>
 where
     T: AxumDatabasePool + Clone + Debug + Sync + Send + 'static,
 {
-    pub(crate) store: AxumSessionStore<T>,
+    pub store: AxumSessionStore<T>,
     pub(crate) session_id:SessionId,
     pub(crate) session_data:AxumSessionData,
     pub(crate) is_modified:bool,
 }
 
 //TODO viriant as str
-pub enum SessionIdType{
+pub(crate) enum SessionIdType{
     Cached,
     Empty
 }
 
 #[derive(Clone,Debug)]
-pub struct SessionId(pub String);// `{type}+uuid`, c:cached, e:empty
+pub(crate) struct SessionId(pub(crate) String);// `{type}+uuid`, c:cached, e:empty
 impl SessionId{
-    pub fn from(s: &str) -> Self{
+    pub(crate) fn from(s: &str) -> Self{
         let ty_add=s.get(0..2).and_then(|ty| (ty=="c+"||ty=="e+").then_some(ty));
         let uuid=s.get(2..).and_then(|uuid|Uuid::parse_str(uuid).ok());
         
@@ -38,11 +38,11 @@ impl SessionId{
         SessionId(s.to_string())
     }
 
-    pub fn init_session_id()->Self{
+    pub(crate) fn init_session_id()->Self{
         SessionId(format!("e+{}",Uuid::new_v4()))
     }
 
-    pub fn get_session_id_type(&self)->SessionIdType{
+    pub(crate) fn get_session_id_type(&self)->SessionIdType{
         let ty=self.0.get(0..1).and_then(|ty| (ty=="c"||ty=="e").then_some(ty));
         match ty {
             Some("c")=>SessionIdType::Cached,
@@ -50,7 +50,7 @@ impl SessionId{
         }
     }
 
-    pub fn get_session_guid(&self)->Uuid{
+    pub(crate) fn get_session_guid(&self)->Uuid{
         self.0.get(2..)
             .and_then(|uuid|
                 Uuid::parse_str(uuid).ok()
@@ -58,7 +58,7 @@ impl SessionId{
             .unwrap()
     }
 
-    pub fn change_session_id_cached_type(&mut self){
+    pub(crate) fn change_session_id_cached_type(&mut self){
         *self=SessionId(format!("c+{}",self.get_session_guid()));
     }
 }
@@ -67,7 +67,7 @@ impl<T> AxumSession<T>
 where
     T: AxumDatabasePool + Clone + Debug + Sync + Send + 'static,
 {
-    pub async fn load_or_init(store: &AxumSessionStore<T>,session_id:Option<&str>)->Result<AxumSession<T>,anyhow::Error>{
+    pub(crate) async fn load_or_init(store: &AxumSessionStore<T>,session_id:Option<&str>)->Result<AxumSession<T>,anyhow::Error>{
         match session_id {
             None=>{
                 let session_id=SessionId::init_session_id();
@@ -126,7 +126,7 @@ where
     }
 
     pub fn get_identity_str(&self)->&str{
-        &self.session_data.data[SessionKeys::Identity]
+        self.session_data.data[SessionKeys::Identity].as_str()
     }
 
     pub fn set_data(&mut self,key:String,val:String){
@@ -148,7 +148,7 @@ where
         //TODO is_modified= true;
     }
 
-	pub async fn commit(&mut self)->Result<(),anyhow::Error>{
+	pub(crate) async fn commit(&mut self)->Result<(),anyhow::Error>{
         if !self.is_modified{
             return Ok(());
         }

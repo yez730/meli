@@ -5,18 +5,18 @@ use serde::Serialize;
 use uuid::Uuid;
 
 #[derive(Debug,Clone)]
-pub struct AxumSessionData{
-    pub session_id:Uuid,
+pub(crate) struct AxumSessionData{
+    pub(crate) session_id:Uuid,
 
     //Some: 登录用户 / None: 匿名用户
-    pub user_id:Option<Uuid>,
-    pub init_time:DateTime<Local>,
-    pub expiry_time:DateTime<Local>,
-    pub data:HashMap<String,String>,
+    pub(crate) user_id:Option<Uuid>,
+    pub(crate) init_time:DateTime<Local>,
+    pub(crate) expiry_time:DateTime<Local>,
+    pub(crate) data:HashMap<String,String>,
 }
 
 impl AxumSessionData{
-    pub fn init(session_id:Uuid,memory_clear_timeout:Duration)->AxumSessionData{
+    pub(crate) fn init(session_id:Uuid,memory_clear_timeout:Duration)->AxumSessionData{
         AxumSessionData{
             session_id,
             user_id:None,

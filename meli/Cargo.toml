@@ -22,9 +22,9 @@ dotenvy = "0.15"
 
 chrono = {version = "0.4.19"}
 
+axum_session_middleware={ path = "../session_middleware" }
+axum_session_authentication_middleware={path = "../session_authentication_middleware"}
 
-axum_database_sessions = {git = "https://github.com/AscendingCreations/AxumSessions",branch = "axum0.6"}
-axum_sessions_auth={git = "https://github.com/AscendingCreations/AxumSessionsAuth",branch = "5.0"}
 async-trait = "0.1.57"
 anyhow = "1.0.58"
 # thiserror = "1.0.32"

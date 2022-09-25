@@ -1,4 +1,3 @@
-pub const USERID:&str="X-UID";
 pub const SESSIONID:&str="X-SID";
 
 pub mod SessionKeys{

@@ -1,6 +1,7 @@
 use anyhow::{anyhow,Error};
 use async_trait::async_trait;
-use axum_sessions_auth::{HasPermission, Authentication};
+use axum_session_authentication_middleware::{ user as auth_user,session::Authentication};
+use axum_session_middleware::database_pool::AxumDatabasePool;
 use chrono::{Local, NaiveDate};
 use diesel::{prelude::*, data_types::Cents};
 use serde::Serialize;
@@ -8,9 +9,24 @@ use uuid::Uuid;
 
 use crate::{schema::*, axum_pg_pool::AxumPgPool, my_date_format};
 
-#[derive(Queryable,Serialize)]
+#[derive(Queryable,Clone, Debug)]
+pub struct User{
+    pub id: i64,
+
+    pub user_id: Uuid,
+    pub description: String,
+    pub permissions: String,
+    pub roles: String,
+    pub enabled:bool,
+
+    pub create_time: chrono::DateTime<Local>,
+    pub update_time: chrono::DateTime<Local>,
+
+    pub data: Option<String>,
+}
+
+#[derive(Queryable)]
 pub struct Permission{
-    #[serde(skip)]
     pub id: i64,
 
     pub permission_id: Uuid,
@@ -18,15 +34,28 @@ pub struct Permission{
     pub permission_name :String,
     pub description: String,
 
-    #[serde(skip)]
     pub enabled:bool,
-    #[serde(skip)]
     pub create_time: chrono::DateTime<Local>,
-    #[serde(skip)]
     pub update_time: chrono::DateTime<Local>,
-    #[serde(skip)]
     pub data: Option<String>,
 }
+
+#[derive(Queryable)]
+pub struct Role{
+    pub id: i64,
+
+    pub role_id: Uuid,
+    pub role_code: String,
+    pub role_name:String,
+
+    pub permissions:String,
+    pub description:String,
+    pub enabled:bool,
+    pub create_time: chrono::DateTime<Local>,
+    pub update_time: chrono::DateTime<Local>,
+    pub data: Option<String>,
+}
+
 
 #[derive(Insertable)]
 #[diesel(table_name=permissions)]
@@ -45,44 +74,24 @@ pub struct NewPermission<'a>{
 pub struct Session{
     pub id: i64,
     pub session_id: Uuid,
-    pub data: String,
+    pub user_id: Uuid,
+    pub init_time: chrono::DateTime<Local>,
     pub expiry_time: chrono::DateTime<Local>,
     pub create_time: chrono::DateTime<Local>,
     pub update_time: chrono::DateTime<Local>,
+    pub data: Option<String>,
 }
 
 #[derive(Insertable)]
 #[diesel(table_name=sessions)]
 pub struct NewSession<'a> {
     pub session_id: &'a Uuid,
-    pub data: &'a str,
+    pub user_id: &'a Uuid,
+    pub init_time: chrono::DateTime<Local>,
     pub expiry_time: chrono::DateTime<Local>,
     pub create_time: chrono::DateTime<Local>,
     pub update_time: chrono::DateTime<Local>,
-}
-
-#[derive(Queryable,Serialize,Clone, Debug)]
-pub struct User{
-    #[serde(skip)]
-    pub id: i64,
-
-    pub user_id: Uuid,
-    pub description: String,
-    #[serde(skip)]
-    pub permissions: String,
-    #[serde(skip)]
-    pub roles: String,
-    #[serde(skip)]
-    pub enabled:bool,
-
-    #[serde(skip)]
-    pub create_time: chrono::DateTime<Local>,
-
-    #[serde(skip)]
-    pub update_time: chrono::DateTime<Local>,
-
-    #[serde(skip)]
-    pub data: Option<String>,
+    pub data: Option<&'a str>,
 }
 
 #[derive(Insertable)]
@@ -98,56 +107,69 @@ pub struct NewUser<'a>{
     pub data: Option<&'a str>,
 }
 
-// This is only used if you want to use Token based Authentication checks
 #[async_trait]
-impl HasPermission<AxumPgPool> for User {
-    async fn has(&self, perm: &str, pool: &Option<&AxumPgPool>) -> bool {
-        match pool.unwrap().connection.lock() {
-            Ok(mut conn)=>{
-                match permissions::dsl::permissions
-                .filter(permissions::dsl::permission_id.eq_any(serde_json::from_str::<Vec<Uuid>>(&self.permissions).unwrap())) 
-                .filter(permissions::dsl::enabled.eq(true))
-                .select(permissions::dsl::permission_code)
-                .get_results::<String>(&mut *conn) {
-                    Ok(rights)=>rights.contains(&perm.to_string()),
-                    Err(e)=>{
-                        tracing::error!("get conn error {}",e);
-                        false
-                    }
-                }
-            }
-            Err(e)=>{
-                tracing::error!("get conn error {}",e);
-                false
-            }
-        }
-    }
-}
-
-#[async_trait]
-impl Authentication<User, Uuid, AxumPgPool> for User {
-    async fn load_user(userid: Uuid, pool: Option<&AxumPgPool>) -> Result<User, Error> {
-        use crate::schema::*;
-
-        let mut conn=pool.unwrap().connection.lock().map_err(|e|anyhow!(e.to_string()))?;
+impl Authentication<User, AxumPgPool> for User{
+    fn get_user(user_id:Uuid,pool:AxumPgPool)->User{
+        let mut conn=pool.connection.lock().unwrap();//TODO error
 
         users::dsl::users
-            .filter(users::dsl::user_id.eq(userid))
+            .filter(users::dsl::user_id.eq(user_id))
             .filter(users::dsl::enabled.eq(true))
             .get_result::<User>(&mut *conn)
-            .map_err(|e|anyhow!(e.to_string()))
+            .unwrap()
+            //TODO error
     }
 
-    fn is_authenticated(&self) -> bool {
-        true
-    }
+    fn load_identity(&self,pool:AxumPgPool) -> auth_user::Identity{
+        let mut conn=pool.connection.lock().unwrap(); //TODO  unwrap error
 
-    fn is_active(&self) -> bool {
-        true
-    }
+        let user=users::dsl::users
+            .filter(users::dsl::user_id.eq(self.user_id))
+            .filter(users::dsl::enabled.eq(true))
+            .get_result::<User>(&mut *conn)
+            .unwrap();
 
-    fn is_anonymous(&self) -> bool {
-        false
+        let permissions=permissions::dsl::permissions
+            .filter(permissions::dsl::permission_id.eq_any(serde_json::from_str::<Vec<Uuid>>(&user.permissions).unwrap())) 
+            .filter(permissions::dsl::enabled.eq(true))
+            .get_results::<Permission>(&mut *conn)
+            .unwrap();
+        let roles=roles::dsl::roles
+            .filter(roles::dsl::role_id.eq_any(serde_json::from_str::<Vec<Uuid>>(&user.roles).unwrap())) 
+            .filter(roles::dsl::enabled.eq(true))
+            .get_results::<Role>(&mut *conn)
+            .unwrap();
+
+
+        let identity=auth_user::Identity{
+            user_id:user.user_id,
+            roles:roles.into_iter().map(|r|auth_user::Role{
+                role_id: r.role_id,
+                role_code: r.role_code,
+                role_name:r.role_name,
+
+                permissions:r.permissions,
+                description:r.description,
+                enabled:r.enabled,
+                create_time: r.create_time,
+                update_time: r.update_time,
+                data: r.data,
+            }).collect(),
+            permission_codes:permissions.iter().map(|p|p.permission_code.clone()).collect(),
+            permissions:permissions.into_iter().map(|p|auth_user::Permission{
+                permission_id: p.permission_id,
+                    permission_code: p.permission_code,
+                    permission_name :p.permission_name,
+                    description: p.description,
+                    enabled:p.enabled,
+                    create_time: p.create_time,
+                    update_time: p.update_time,
+                    data: p.data,
+            }).collect(),
+
+        };
+
+        identity
     }
 }
 
@@ -196,29 +218,6 @@ pub struct NewConsumer<'a>{
     pub create_time: chrono::DateTime<Local>,
     pub update_time: chrono::DateTime<Local>,
     pub data: Option<&'a str>,
-}
-
-#[derive(Queryable,Serialize)]
-pub struct Role{
-    #[serde(skip)]
-    pub id: i64,
-
-    pub role_id: Uuid,
-    pub role_code: String,
-    pub role_name:String,
-
-    #[serde(skip)]
-    pub permissions:String,
-    #[serde(skip)]
-    pub description:String,
-    #[serde(skip)]
-    pub enabled:bool,
-    #[serde(skip)]
-    pub create_time: chrono::DateTime<Local>,
-    #[serde(skip)]
-    pub update_time: chrono::DateTime<Local>,
-    #[serde(skip)]
-    pub data: Option<String>,
 }
 
 #[derive(Queryable,Serialize)]

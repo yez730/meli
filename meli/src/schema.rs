@@ -105,10 +105,12 @@ diesel::table! {
     sessions (id) {
         id -> Int8,
         session_id -> Uuid,
-        data -> Text,
+        user_id -> Uuid,
+        init_time -> Timestamptz,
         expiry_time -> Timestamptz,
         create_time -> Timestamptz,
         update_time -> Timestamptz,
+        data -> Nullable<Text>,
     }
 }
 

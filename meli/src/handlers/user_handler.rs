@@ -1,6 +1,5 @@
-use axum::{http::{Method, StatusCode}, Json, extract::{Query, Path}};
-use axum_database_sessions::AxumSessionStore;
-use axum_sessions_auth::{Auth, Rights, AuthSession};
+use axum::{http::{Method, StatusCode}, Json, extract::{Query, Path, State}};
+use axum_session_authentication_middleware::session::AuthSession;
 use chrono::{Local, NaiveDate};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
@@ -13,56 +12,48 @@ use diesel::{
     data_types::Cents, pg::Pg
 }; 
 
-use crate::{models::User, axum_pg_pool::AxumPgPool, utils::{get_connection}, login_managers::{get_login_info, password_login::verify_password}};
+use crate::{models::User, axum_pg_pool::AxumPgPool, login_managers::{get_login_info, password_login::verify_password}};
 
 use super::{PaginatedListRequest,PaginatedListResponse};
+use axum_session_authentication_middleware::{ user as auth_user,session::Authentication};
 
 #[derive(Deserialize)]
 pub struct LoginRequest{
-    //登录名
     pub username:String,
-    //密码
     pub password:String,
 }
 
 #[derive(Serialize)]
-pub struct Identity{
-    pub user:UserResponse,
-    pub account:Option<AccountResonse>,
-    pub consumer:Option<Consumer>,
-}
-
-#[derive(Serialize)]
-pub struct UserResponse{
-    #[serde(flatten)]
-    pub user:User,
-    pub permissions:Vec<Permission>,
-    pub roles:Vec<Role>,
+pub struct LoginResponse{
+    pub identity:auth_user::Identity,
+    pub account :Option<AccountResonse>,
+    pub consumer:Option<Consumer>
 }
 
 #[derive(Serialize)]
 pub struct AccountResonse{
     #[serde(flatten)]
-    account :Account,
-
-    merchant:Merchant
+    pub account :Account,
+    pub merchant:Merchant
 }
 
-pub async fn login_by_username(auth: AuthSession<User, Uuid, AxumPgPool, AxumPgPool>,Json(req):Json<LoginRequest>)->Result<Json<Identity>,(StatusCode,String)>{
-    let login_info=get_login_info(req.username).map_err(|e|(StatusCode::INTERNAL_SERVER_ERROR,e.to_string()))?;
+pub async fn login_by_username(State(pool):State<AxumPgPool>,mut auth: AuthSession<AxumPgPool, AxumPgPool,User>,Json(req):Json<LoginRequest>)->Result<Json<LoginResponse>,(StatusCode,String)>{
+    let mut conn=pool.connection.lock().unwrap(); //TODO  unwrap error
+
+    let login_info=get_login_info(req.username,&mut *conn).map_err(|e|(StatusCode::INTERNAL_SERVER_ERROR,e.to_string()))?;
     
-    verify_password(login_info.user_id, req.password).map_err(|e|(StatusCode::INTERNAL_SERVER_ERROR,e.to_string()))?;
-    
+    verify_password(login_info.user_id, req.password,&mut *conn).map_err(|e|(StatusCode::INTERNAL_SERVER_ERROR,e.to_string()))?;
+
     let user=users::dsl::users
             .filter(users::dsl::user_id.eq(login_info.user_id))
             .filter(users::dsl::enabled.eq(true))
-            .get_result::<User>(&mut get_connection()).map_err(|e|(StatusCode::INTERNAL_SERVER_ERROR,e.to_string()))?;
+            .get_result::<User>(&mut *conn).map_err(|e|(StatusCode::INTERNAL_SERVER_ERROR,e.to_string()))?;
 
     let account=accounts::table
         .inner_join(merchants::table.on(accounts::merchant_id.eq(merchants::merchant_id)))
         .filter(accounts::dsl::user_id.eq(user.user_id))
         .filter(accounts::dsl::enabled.eq(true))
-        .get_result::<(Account,Merchant)>(&mut get_connection())
+        .get_result::<(Account,Merchant)>(&mut *conn)
         .ok() //TODO track error
         .map(|a_m| AccountResonse{
             account:a_m.0,
@@ -71,80 +62,27 @@ pub async fn login_by_username(auth: AuthSession<User, Uuid, AxumPgPool, AxumPgP
     let consumer=consumers::dsl::consumers
         .filter(consumers::dsl::user_id.eq(user.user_id))
         .filter(consumers::dsl::enabled.eq(true))
-        .get_result::<Consumer>(&mut get_connection())
+        .get_result::<Consumer>(&mut *conn)
         .ok();
     
-    let permissions=permissions::dsl::permissions
-        .filter(permissions::dsl::permission_id.eq_any(serde_json::from_str::<Vec<Uuid>>(&user.permissions).unwrap())) 
-        .filter(permissions::dsl::enabled.eq(true))
-        .get_results::<Permission>(&mut get_connection())
-        .map_err(|e|(StatusCode::INTERNAL_SERVER_ERROR,e.to_string()))?;
-    let roles=roles::dsl::roles
-        .filter(roles::dsl::role_id.eq_any(serde_json::from_str::<Vec<Uuid>>(&user.roles).unwrap())) 
-        .filter(roles::dsl::enabled.eq(true))
-        .get_results::<Role>(&mut get_connection())
-        .map_err(|e|(StatusCode::INTERNAL_SERVER_ERROR,e.to_string()))?;
-    let user_response=UserResponse {user,permissions,roles};
-
-    // set user to cookie
-    auth.login_user(user_response.user.user_id).await;
-    auth.remember_user(true).await;
-
-    let identity=Identity{
-        user:user_response,
-        account:account,
-        consumer:consumer,
+    let response=LoginResponse{
+        identity:user.load_identity(pool.clone()),
+        account,
+        consumer,
     };
+    auth.sign_in(login_info.user_id).await; // TODO ????????
+    
+    Ok(Json(response))
+}
 
+pub async fn logout(mut auth: AuthSession< AxumPgPool, AxumPgPool,User>){
+    auth.sign_out();
+}
+
+pub async fn get_current_identity(auth: AuthSession<AxumPgPool, AxumPgPool,User>)->Result<Json<auth_user::Identity>,(StatusCode,String)>{
+    let identity=auth.authenticatied_identity.ok_or((StatusCode::UNAUTHORIZED,"no login".to_string()))?;
     Ok(Json(identity))
 }
-
-pub async fn logout(auth: AuthSession<User, Uuid, AxumPgPool, AxumPgPool>){
-    if let Some(_)= auth.current_user {
-        auth.logout_user().await;
-    }
-}
-
-pub async fn get_current_identity(auth: AuthSession<User, Uuid, AxumPgPool, AxumPgPool>)->Result<Json<Identity>,(StatusCode,String)>{
-    let user=auth.current_user.ok_or((StatusCode::UNAUTHORIZED,"no login".to_string()))?;
-   
-    let account=accounts::table
-        .inner_join(merchants::table.on(accounts::merchant_id.eq(merchants::merchant_id)))
-        .filter(accounts::dsl::user_id.eq(user.user_id))
-        .filter(accounts::dsl::enabled.eq(true))
-        .get_result::<(Account,Merchant)>(&mut get_connection())
-        .ok() //TODO track error
-        .map(|a_m| AccountResonse{
-            account:a_m.0,
-            merchant:a_m.1,
-        });
-    let consumer=consumers::dsl::consumers
-        .filter(consumers::dsl::user_id.eq(user.user_id))
-        .filter(consumers::dsl::enabled.eq(true))
-        .get_result::<Consumer>(&mut get_connection())
-        .ok();
-
-    let permissions=permissions::dsl::permissions
-        .filter(permissions::dsl::permission_id.eq_any(serde_json::from_str::<Vec<Uuid>>(&user.permissions).unwrap())) 
-        .filter(permissions::dsl::enabled.eq(true))
-        .get_results::<Permission>(&mut get_connection())
-        .map_err(|e|(StatusCode::INTERNAL_SERVER_ERROR,e.to_string()))?;
-    let roles=roles::dsl::roles
-        .filter(roles::dsl::role_id.eq_any(serde_json::from_str::<Vec<Uuid>>(&user.roles).unwrap())) 
-        .filter(roles::dsl::enabled.eq(true))
-        .get_results::<Role>(&mut get_connection())
-        .map_err(|e|(StatusCode::INTERNAL_SERVER_ERROR,e.to_string()))?;
-    let user_response=UserResponse {user,permissions,roles};
-
-    let identity=Identity{
-        user:user_response,
-        account:account,
-        consumer:consumer,
-    };
-
-    Ok(Json(identity))
-}
-
 
 #[derive(Deserialize)]
 pub struct ConsumerRequest{
@@ -155,24 +93,19 @@ pub struct ConsumerRequest{
 }
 
 pub async fn get_consumers(
+    State(pool):State<AxumPgPool>,
     Query(params):Query<PaginatedListRequest>, 
-    method: Method, 
-    auth: AuthSession<User, Uuid, AxumPgPool, AxumPgPool>,
-    store: AxumSessionStore<AxumPgPool>
+    auth: AuthSession<AxumPgPool, AxumPgPool,User>,
 )->Result<Json<PaginatedListResponse<Consumer>>,(StatusCode,String)>{
     //检查登录
-    let cur_user=auth.current_user.ok_or((StatusCode::INTERNAL_SERVER_ERROR,"no login".to_string()))?;
-    
+    let identity=auth.authenticatied_identity.as_ref().ok_or((StatusCode::UNAUTHORIZED,"no login".to_string()))?;
+
     //检查权限
-    Auth::<User, Uuid, AxumPgPool>::build([Method::GET], false)
-        .requires(Rights::any([
-            Rights::permission(authorization_policy::ACCOUNT)
-        ]))
-        .validate(&cur_user, &method, store.client.as_ref())
-        .await
-        .then_some(())
-        .ok_or((StatusCode::INTERNAL_SERVER_ERROR,"no permission".to_string()))?;
+    auth.require_permissions(vec![authorization_policy::ACCOUNT])
+        .map_err(|e|(StatusCode::INTERNAL_SERVER_ERROR,"no permission".to_string()))?;
     
+    let mut conn=pool.connection.lock().unwrap(); //TODO  unwrap error
+
     let get_consumers_query=|p:&PaginatedListRequest|{
         let mut query=consumers::dsl::consumers
             .filter(consumers::dsl::enabled.eq(true))
@@ -185,12 +118,12 @@ pub async fn get_consumers(
         query
     };
 
-    let count=get_consumers_query(&params).count().get_result(&mut get_connection()).map_err(|e|(StatusCode::INTERNAL_SERVER_ERROR,e.to_string()))?;
+    let count=get_consumers_query(&params).count().get_result(&mut *conn).map_err(|e|(StatusCode::INTERNAL_SERVER_ERROR,e.to_string()))?;
     let data=get_consumers_query(&params)
         .order(consumers::dsl::create_time.desc())
         .limit(params.page_size)
         .offset(params.page_index*params.page_size)
-        .get_results::<Consumer>(&mut get_connection())
+        .get_results::<Consumer>(&mut *conn)
         .map_err(|e|(StatusCode::INTERNAL_SERVER_ERROR,e.to_string()))?;
     
     Ok(Json(PaginatedListResponse{
@@ -202,24 +135,19 @@ pub async fn get_consumers(
 }
 
 pub async fn add_consumer(
-    method: Method, 
-    auth: AuthSession<User, Uuid, AxumPgPool, AxumPgPool>,
-    store: AxumSessionStore<AxumPgPool>,
+    State(pool):State<AxumPgPool>,
+    auth: AuthSession<AxumPgPool, AxumPgPool,User>,
     Json(req): Json<ConsumerRequest>
 )->Result<(),(StatusCode,String)>{
     //检查登录
-    let cur_user=auth.current_user.ok_or((StatusCode::INTERNAL_SERVER_ERROR,"no login".to_string()))?;
+    let identity=auth.authenticatied_identity.as_ref().ok_or((StatusCode::UNAUTHORIZED,"no login".to_string()))?;
 
     //检查权限
-    Auth::<User, Uuid, AxumPgPool>::build([Method::POST], false)
-        .requires(Rights::any([
-            Rights::permission(authorization_policy::ACCOUNT)
-        ]))
-        .validate(&cur_user, &method, store.client.as_ref())
-        .await
-        .then_some(())
-        .ok_or((StatusCode::INTERNAL_SERVER_ERROR,"no permission.".to_string()))?;
-
+    auth.require_permissions(vec![authorization_policy::ACCOUNT])
+        .map_err(|e|(StatusCode::INTERNAL_SERVER_ERROR,"no permission".to_string()))?;
+        
+    let mut conn=pool.connection.lock().unwrap(); //TODO  unwrap error
+    
     //添加 TODO insert data with enabled settting false, finally set to true.
     // 1. add user
     let user_id=Uuid::new_v4();
@@ -235,7 +163,7 @@ pub async fn add_consumer(
     };
     diesel::insert_into(users::table)
     .values(&new_user)
-    .execute(&mut get_connection()).map_err(|e|{
+    .execute(&mut *conn).map_err(|e|{
         tracing::error!("{}",e.to_string());
         (StatusCode::INTERNAL_SERVER_ERROR,e.to_string())
     })?;
@@ -253,7 +181,7 @@ pub async fn add_consumer(
     };
     diesel::insert_into(login_infos::table)
     .values(&login_info)
-    .execute(&mut get_connection()).map_err(|e|{
+    .execute(&mut *conn).map_err(|e|{
         tracing::error!("{}",e.to_string());
         (StatusCode::INTERNAL_SERVER_ERROR,e.to_string())
     })?;
@@ -272,7 +200,7 @@ pub async fn add_consumer(
     };
     diesel::insert_into(password_login_providers::table)
     .values(&new_password_login_provider)
-    .execute(&mut get_connection()).map_err(|e|{
+    .execute(&mut *conn).map_err(|e|{
         tracing::error!("{}",e.to_string());
         (StatusCode::INTERNAL_SERVER_ERROR,e.to_string())
     })?;
@@ -293,7 +221,7 @@ pub async fn add_consumer(
     };
     diesel::insert_into(consumers::table)
     .values(&new_consumer)
-    .execute(&mut get_connection()).map_err(|e|{
+    .execute(&mut *conn).map_err(|e|{
         tracing::error!("{}",e.to_string());
         (StatusCode::INTERNAL_SERVER_ERROR,e.to_string())
     })?;
@@ -302,24 +230,20 @@ pub async fn add_consumer(
 }
 
 pub async fn delete_consumer(
+    State(pool):State<AxumPgPool>,
     Path(id):Path<Uuid>, 
     method: Method, 
-    auth: AuthSession<User, Uuid, AxumPgPool, AxumPgPool>,
-    store: AxumSessionStore<AxumPgPool>,
+    auth: AuthSession<AxumPgPool, AxumPgPool,User>,
 )->Result<(),(StatusCode,String)>{
     //检查登录
-    let cur_user=auth.current_user.ok_or((StatusCode::INTERNAL_SERVER_ERROR,"no login".to_string()))?;
+    let identity=auth.authenticatied_identity.as_ref().ok_or((StatusCode::UNAUTHORIZED,"no login".to_string()))?;
 
     //检查权限
-    Auth::<User, Uuid, AxumPgPool>::build([Method::DELETE], false)
-        .requires(Rights::any([
-            Rights::permission(authorization_policy::ACCOUNT)
-        ]))
-        .validate(&cur_user, &method, store.client.as_ref())
-        .await
-        .then_some(())
-        .ok_or((StatusCode::INTERNAL_SERVER_ERROR,"no permission".to_string()))?;
+    auth.require_permissions(vec![authorization_policy::ACCOUNT])
+        .map_err(|e|(StatusCode::INTERNAL_SERVER_ERROR,"no permission".to_string()))?;
     
+    let mut conn=pool.connection.lock().unwrap(); //TODO  unwrap error    
+
     // 先不实际删除数据
     let count=diesel::update(
         consumers::dsl::consumers
@@ -330,7 +254,7 @@ pub async fn delete_consumer(
             consumers::dsl::enabled.eq(false),
             consumers::dsl::update_time.eq(Local::now())
         ))
-    .execute(&mut get_connection()).map_err(|e|{
+    .execute(&mut *conn).map_err(|e|{
         tracing::error!("{}",e.to_string());
         (StatusCode::INTERNAL_SERVER_ERROR,e.to_string())
     })?;
@@ -343,25 +267,20 @@ pub async fn delete_consumer(
 }
 
 pub async fn update_consumer(
+    State(pool):State<AxumPgPool>,
     Path(id):Path<Uuid>, 
-    method: Method, 
-    auth: AuthSession<User, Uuid, AxumPgPool, AxumPgPool>,
-    store: AxumSessionStore<AxumPgPool>,
+    auth: AuthSession<AxumPgPool, AxumPgPool,User>,
     Json(req): Json<ConsumerRequest>
 )->Result<(),(StatusCode,String)>{
     //检查登录
-    let cur_user=auth.current_user.ok_or((StatusCode::INTERNAL_SERVER_ERROR,"no login".to_string()))?;
+    let identity=auth.authenticatied_identity.as_ref().ok_or((StatusCode::UNAUTHORIZED,"no login".to_string()))?;
 
     //检查权限
-    Auth::<User, Uuid, AxumPgPool>::build([Method::POST], false)
-        .requires(Rights::any([
-            Rights::permission(authorization_policy::ACCOUNT)
-        ]))
-        .validate(&cur_user, &method, store.client.as_ref())
-        .await
-        .then_some(())
-        .ok_or((StatusCode::INTERNAL_SERVER_ERROR,"no permission".to_string()))?;
-    
+    auth.require_permissions(vec![authorization_policy::ACCOUNT])
+        .map_err(|e|(StatusCode::INTERNAL_SERVER_ERROR,"no permission".to_string()))?;
+   
+    let mut conn=pool.connection.lock().unwrap(); //TODO  unwrap error
+
     diesel::update(
         consumers::dsl::consumers
         .filter(consumers::dsl::consumer_id.eq(id))
@@ -374,7 +293,7 @@ pub async fn update_consumer(
             consumers::dsl::birth_day.eq(req.birth_day),
             consumers::dsl::update_time.eq(Local::now())
         ))
-    .execute(&mut get_connection()).map_err(|e|{
+    .execute(&mut *conn).map_err(|e|{
         tracing::error!("{}",e.to_string());
         (StatusCode::INTERNAL_SERVER_ERROR,e.to_string())
     })?;
@@ -383,28 +302,23 @@ pub async fn update_consumer(
 }
 
 pub async fn get_consumer(
+    State(pool):State<AxumPgPool>,
     Path(id):Path<Uuid>, 
-    method: Method, 
-    auth: AuthSession<User, Uuid, AxumPgPool, AxumPgPool>,
-    store: AxumSessionStore<AxumPgPool>,
+    auth: AuthSession<AxumPgPool, AxumPgPool,User>,
 )->Result<Json<Consumer>,(StatusCode,String)>{
     //检查登录
-    let cur_user=auth.current_user.ok_or((StatusCode::INTERNAL_SERVER_ERROR,"no login".to_string()))?;
+    let identity=auth.authenticatied_identity.as_ref().ok_or((StatusCode::UNAUTHORIZED,"no login".to_string()))?;
 
     //检查权限
-    Auth::<User, Uuid, AxumPgPool>::build([Method::GET], false)
-        .requires(Rights::any([
-            Rights::permission(authorization_policy::ACCOUNT)
-        ]))
-        .validate(&cur_user, &method, store.client.as_ref())
-        .await
-        .then_some(())
-        .ok_or((StatusCode::INTERNAL_SERVER_ERROR,"no permission".to_string()))?;
+    auth.require_permissions(vec![authorization_policy::ACCOUNT])
+        .map_err(|e|(StatusCode::INTERNAL_SERVER_ERROR,"no permission".to_string()))?;
+
+    let mut conn=pool.connection.lock().unwrap(); //TODO  unwrap error    
     
     let consumer=consumers::dsl::consumers
         .filter(consumers::dsl::consumer_id.eq(id))
         .filter(consumers::dsl::enabled.eq(true))
-        .get_result::<Consumer>(&mut get_connection())
+        .get_result::<Consumer>(&mut *conn)
         .map_err(|e|(StatusCode::INTERNAL_SERVER_ERROR,e.to_string()))?;
     
     Ok(Json(consumer))

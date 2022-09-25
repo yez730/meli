@@ -1,7 +1,9 @@
+use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 
+use anyhow::{anyhow, Ok};
 use async_trait::async_trait;
-use axum_database_sessions::{AxumDatabasePool, SessionError};
+use axum_session_middleware::database_pool::{AxumDatabasePool,self};
 use chrono::DateTime;
 use chrono::{Local, Utc,offset::TimeZone};
 use serde_json::{Value, json};
@@ -28,107 +30,72 @@ impl std::fmt::Debug for AxumPgPool {
 
 #[async_trait]
 impl AxumDatabasePool for AxumPgPool{
-    async fn initiate(&self, _table_name: &str) -> Result<(), SessionError> {
-        Ok(())
-    }
-
-    async fn delete_by_expiry(&self, _table_name: &str) -> Result<(), SessionError> {
-        let mut conn=self.connection.lock().map_err(|e| SessionError::GenericNotSupportedError(e.to_string()))?;
-        let _num_deleted=diesel::delete(sessions::dsl::sessions.filter(sessions::dsl::expiry_time.lt(now)))
-            .execute(&mut *conn).map_err(|e|SessionError::GenericNotSupportedError(e.to_string()))?;
-
-        Ok(())
-    }
-
-    async fn count(&self, _table_name: &str) -> Result<i64, SessionError> {
-        let mut conn=self.connection.lock().map_err(|e| SessionError::GenericNotSupportedError(e.to_string()))?;
-        let count=sessions::dsl::sessions.count()
-            .execute(&mut *conn)
-            .map_err(|e|SessionError::GenericNotSupportedError(e.to_string()))?;
-
-        return Ok(count as i64);
-    }
-
-    async fn store(
-        &self,
-        uuid: &str,
-        data: &str,
-        expires: i64,
-        _table_name: &str,
-    ) -> Result<(), SessionError> {
-        let mut conn=self.connection.lock().map_err(|e| SessionError::GenericNotSupportedError(e.to_string()))?;
-        
-        let uuid=Uuid::parse_str(uuid).unwrap(); //TODO fix unwrap
+    async fn store(&self,session_data:&database_pool::SessionData) -> Result<(), anyhow::Error>{
+        let mut conn=self.connection.lock()
+            .map_err(|e| anyhow!("Get connection error: {}",e))?;
         
         let session=sessions::dsl::sessions
-            .filter(sessions::dsl::session_id.eq(uuid))
+            .filter(sessions::dsl::session_id.eq(session_data.session_id))
             .get_result::<Session>(&mut *conn).ok();
-
-        //重新设置 session.data 内部时间字段的时区
-        let mut v:Value=serde_json::from_str(&data)?;
-        v["expires"]=json!(v["expires"].as_str().unwrap().parse::<DateTime<Utc>>().unwrap().with_timezone(&Local)); //TODO fix unwrap
-        v["autoremove"]=json!(v["autoremove"].as_str().unwrap().parse::<DateTime<Utc>>().unwrap().with_timezone(&Local));
-        let data=v.to_string();
         
+        let data_str=serde_json::to_string(&session_data.data).map_err(|e| anyhow!("Serialize data error: {}",e))?;
         match session {
             Some(session)=>{
                 diesel::update(sessions::dsl::sessions.find(session.id))
                 .set((
-                        sessions::dsl::expiry_time.eq(Utc.timestamp(expires,0)),
-                        sessions::dsl::data.eq(data),
+                        sessions::dsl::user_id.eq(session_data.user_id), // TODO need？
+                        sessions::dsl::data.eq(data_str),
+                        sessions::dsl::expiry_time.eq(session_data.expiry_time),
                         sessions::dsl::update_time.eq(Local::now()),
                     ))
                 .execute(&mut *conn)
-                .map_err(|e|SessionError::GenericNotSupportedError(e.to_string()))?;
+                .map_err(|e| anyhow!("Execute error: {}",e))?;
             }
             None=>{
                 let new_session=NewSession{
-                    session_id: &uuid,
-                    expiry_time: Utc.timestamp(expires,0).with_timezone(&Local),
-                    data: &data,
+                    session_id: &session_data.session_id,
+                    user_id: &session_data.user_id,
+                    expiry_time: session_data.expiry_time,
+                    init_time: session_data.init_time,
                     create_time: Local::now(),
                     update_time: Local::now(),
+                    data: Some(data_str.as_str()),
                 };
                 diesel::insert_into(sessions::table).values(&new_session)
-                    .execute(&mut *conn).map_err(|e|SessionError::GenericNotSupportedError(e.to_string()))?;
+                    .execute(&mut *conn)
+                    .map_err(|e| anyhow!("Execute error: {}",e))?;
             }
         }       
 
         Ok(())
     }
 
-    async fn load(&self, uuid: &str, _table_name: &str) -> Result<Option<String>, SessionError> {
-        let mut conn=self.connection.lock().map_err(|e| SessionError::GenericNotSupportedError(e.to_string()))?;
+    async fn load(&self, session_id: &Uuid) -> Result<database_pool::SessionData, anyhow::Error>{
+        use std::result::Result::Ok;
+        let mut conn=self.connection.lock()
+            .map_err(|e| anyhow!("Get connection error: {}",e))?;
         
-        let uuid=Uuid::parse_str(uuid).unwrap();
-
         let session=sessions::dsl::sessions
-            .filter(sessions::dsl::session_id.eq(uuid)) 
-            .filter(sessions::dsl::expiry_time.gt(now))
-            .get_result::<Session>(&mut *conn)
-            .ok()
-            .map(|s|s.data);
+            .filter(sessions::dsl::session_id.eq(session_id)) 
+            .get_result::<Session>(&mut *conn);
 
-        Ok(session)
-    }
-
-    async fn delete_one_by_id(&self, uuid: &str, _table_name: &str) -> Result<(), SessionError> {
-        let mut conn=self.connection.lock().map_err(|e| SessionError::GenericNotSupportedError(e.to_string()))?;
-     
-        let uuid=Uuid::parse_str(uuid).unwrap();
-        
-        diesel::delete(sessions::dsl::sessions.filter(sessions::dsl::session_id.eq(uuid)))
-            .execute(&mut *conn).map_err(|e|SessionError::GenericNotSupportedError(e.to_string()))?;
-       
-        Ok(())
-    }
-
-    async fn delete_all(&self, _table_name: &str) -> Result<(), SessionError> {
-        let mut conn=self.connection.lock().map_err(|e| SessionError::GenericNotSupportedError(e.to_string()))?;
-     
-        diesel::delete(sessions::dsl::sessions)
-            .execute(&mut *conn).map_err(|e|SessionError::GenericNotSupportedError(e.to_string()))?;
-
-        Ok(())
+        match session {
+            Err(e)=>Err(anyhow!("Get connection error: {}",e)),
+            Ok(session)=>{
+                let data=match session.data {
+                    Some(data) if serde_json::from_str::<HashMap<String,String>>(&data).is_ok()
+                        =>serde_json::from_str::<HashMap<String,String>>(&data).unwrap(),
+                    _=>Default::default(),
+                };
+                let session_data=database_pool::SessionData{
+                    session_id:session.session_id,
+                    user_id:session.user_id,
+                    init_time:session.init_time,
+                    expiry_time:session.expiry_time,
+                    data:data,
+                };
+                Ok(session_data)
+            }
+        }
     }
 }

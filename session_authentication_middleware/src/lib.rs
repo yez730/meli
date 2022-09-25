@@ -1,12 +1,6 @@
 
-mod config;
-mod layer;
+pub mod layer;
 mod service;
-mod session;
-mod user;
-
-pub use config::AxumAuthConfig;
-pub use layer::AuthSessionLayer;
-pub use service::AuthSessionService;
-pub use session::{AuthSession, Authentication};
+pub mod session;
+pub mod user;
 

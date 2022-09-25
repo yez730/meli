@@ -8,7 +8,7 @@ use uuid::Uuid;
 pub trait AxumDatabasePool{
     async fn store(&self,session_data:&SessionData) -> Result<(), anyhow::Error>;
 
-    async fn load(&self, session_id: &Uuid) -> Result<Option<SessionData>, anyhow::Error>;
+    async fn load(&self, session_id: &Uuid) -> Result<SessionData, anyhow::Error>;
 }
 
 pub struct SessionData{

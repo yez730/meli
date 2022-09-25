@@ -1,52 +1,51 @@
+use std::{fmt, marker::PhantomData};
 use axum_session_middleware::database_pool::AxumDatabasePool;
-use chrono::{Duration, Utc};
-use serde::{de::DeserializeOwned, Serialize};
-use std::{fmt, hash::Hash, marker::PhantomData};
 use tower_layer::Layer;
 
-use crate::{AuthSessionService, Authentication};
+use crate::{session::Authentication, service::AuthSessionService};
 
-
-/// Layer used to generate an AuthSessionService.
-///
 #[derive(Clone, Debug)]
-pub struct AuthSessionLayer<P,User>
+pub struct AuthSessionLayer<SessionP,AuthP,User,>
 where
-    P: AxumDatabasePool + Clone + fmt::Debug + Sync + Send + 'static,
-    User:Authentication<User>,
+    AuthP: Clone + Send + Sync + fmt::Debug + 'static,
+    User:Authentication<User,AuthP> + Clone + Send + Sync + 'static,
+    SessionP: AxumDatabasePool + Clone + fmt::Debug + Sync + Send + 'static,
 {
+    pub(crate) database_pool:AuthP,
     pub phantom_user: PhantomData<User>,
-    pub phantom_pool: PhantomData<P>,
-    // pub phantom_type: PhantomData<Type>,
+    pub phantom_session_pool: PhantomData<SessionP>,
 }
 
-impl<P,User> AuthSessionLayer<P,User>
+impl<AuthP,User,SessionP> AuthSessionLayer<SessionP,AuthP,User,>
 where
-    P: AxumDatabasePool + Clone + fmt::Debug + Sync + Send + 'static,
-    User:Authentication<User>,
+AuthP: Clone + Send + Sync + fmt::Debug + 'static,
+User:Authentication<User,AuthP> + Clone + Send + Sync + 'static,
+SessionP: AxumDatabasePool + Clone + fmt::Debug + Sync + Send + 'static,
 {   
     //TODO new phantom_type??
-    pub fn new() -> Self {
+    pub fn new(pool:AuthP) -> Self {
         AuthSessionLayer{
+            database_pool:pool,
             phantom_user: PhantomData::default(),
-            phantom_pool: PhantomData::default(),
+            phantom_session_pool: PhantomData::default(),
         }
-        
     }
 }
 
-impl<S,P,User> Layer<S> for AuthSessionLayer<P,User>
+impl<S,AuthP,User,SessionP> Layer<S> for AuthSessionLayer<SessionP,AuthP,User,>
 where
-    P: AxumDatabasePool + Clone + fmt::Debug + Sync + Send + 'static,
-    User:Authentication<User>,
+    AuthP: Clone + Send + Sync + fmt::Debug + 'static,
+    User:Authentication<User,AuthP> + Clone + Send + Sync + 'static,
+    SessionP: AxumDatabasePool + Clone + fmt::Debug + Sync + Send + 'static,
 {
-    type Service = AuthSessionService<S,P,User>;
+    type Service = AuthSessionService<S,AuthP,User,SessionP>;
 
     fn layer(&self, inner: S) -> Self::Service {
         AuthSessionService {
+            database_pool:self.database_pool.clone(),
             inner,
-            phantom_session: PhantomData::default(),
             phantom_user: PhantomData::default(),
+            phantom_session_pool: PhantomData::default(),
         }
     }
 }

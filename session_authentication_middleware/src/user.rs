@@ -6,9 +6,9 @@ use uuid::Uuid;
 #[derive(Serialize,Debug,Clone,Deserialize)]
 pub struct Identity{
     pub user_id:Uuid,
-    pub Roles:Vec<Permission>,
-    pub Permissions:Option<Role>,
-    pub PermissionCodes:Vec<String>,
+    pub roles:Vec<Role>,
+    pub permissions:Vec<Permission>,
+    pub permission_codes:Vec<String>,
 }
 
 #[derive(Serialize,Debug,Clone,Deserialize)]
