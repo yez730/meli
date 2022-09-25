@@ -110,7 +110,7 @@ pub struct NewUser<'a>{
 #[async_trait]
 impl Authentication<User, AxumPgPool> for User{
     fn get_user(user_id:Uuid,pool:AxumPgPool)->User{
-        let mut conn=pool.connection.lock().unwrap();//TODO error
+        let mut conn=pool.pool.get().unwrap();//TODO error
 
         users::dsl::users
             .filter(users::dsl::user_id.eq(user_id))
@@ -121,7 +121,7 @@ impl Authentication<User, AxumPgPool> for User{
     }
 
     fn load_identity(&self,pool:AxumPgPool) -> auth_user::Identity{
-        let mut conn=pool.connection.lock().unwrap(); //TODO  unwrap error
+        let mut conn=pool.pool.get().unwrap();//TODO error
 
         let user=users::dsl::users
             .filter(users::dsl::user_id.eq(self.user_id))
@@ -294,7 +294,7 @@ pub struct NewMerchant<'a>{
 }
 
 
-#[derive(Queryable)]
+#[derive(Queryable,Clone)]
 pub struct LoginInfo{
     pub id: i64,
     pub login_info_id: Uuid,

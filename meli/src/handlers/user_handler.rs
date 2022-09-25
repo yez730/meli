@@ -9,7 +9,7 @@ use crate::{
 };
 use diesel::{
     prelude::*, // for .filter
-    data_types::Cents, pg::Pg
+    data_types::Cents,
 }; 
 
 use crate::{models::User, axum_pg_pool::AxumPgPool, login_managers::{get_login_info, password_login::verify_password}};
@@ -38,7 +38,7 @@ pub struct AccountResonse{
 }
 
 pub async fn login_by_username(State(pool):State<AxumPgPool>,mut auth: AuthSession<AxumPgPool, AxumPgPool,User>,Json(req):Json<LoginRequest>)->Result<Json<LoginResponse>,(StatusCode,String)>{
-    let mut conn=pool.connection.lock().unwrap(); //TODO  unwrap error
+    let mut conn=pool.pool.get().unwrap();//TODO error
 
     let login_info=get_login_info(req.username,&mut *conn).map_err(|e|(StatusCode::INTERNAL_SERVER_ERROR,e.to_string()))?;
     
@@ -70,13 +70,13 @@ pub async fn login_by_username(State(pool):State<AxumPgPool>,mut auth: AuthSessi
         account,
         consumer,
     };
-    auth.sign_in(login_info.user_id).await; // TODO ????????
+    auth.sign_in(login_info.user_id).await;
     
     Ok(Json(response))
 }
 
 pub async fn logout(mut auth: AuthSession< AxumPgPool, AxumPgPool,User>){
-    auth.sign_out();
+    auth.sign_out().await;
 }
 
 pub async fn get_current_identity(auth: AuthSession<AxumPgPool, AxumPgPool,User>)->Result<Json<auth_user::Identity>,(StatusCode,String)>{
@@ -104,7 +104,7 @@ pub async fn get_consumers(
     auth.require_permissions(vec![authorization_policy::ACCOUNT])
         .map_err(|e|(StatusCode::INTERNAL_SERVER_ERROR,"no permission".to_string()))?;
     
-    let mut conn=pool.connection.lock().unwrap(); //TODO  unwrap error
+    let mut conn=pool.pool.get().unwrap();//TODO error
 
     let get_consumers_query=|p:&PaginatedListRequest|{
         let mut query=consumers::dsl::consumers
@@ -146,7 +146,7 @@ pub async fn add_consumer(
     auth.require_permissions(vec![authorization_policy::ACCOUNT])
         .map_err(|e|(StatusCode::INTERNAL_SERVER_ERROR,"no permission".to_string()))?;
         
-    let mut conn=pool.connection.lock().unwrap(); //TODO  unwrap error
+    let mut conn=pool.pool.get().unwrap();//TODO error
     
     //添加 TODO insert data with enabled settting false, finally set to true.
     // 1. add user
@@ -242,7 +242,7 @@ pub async fn delete_consumer(
     auth.require_permissions(vec![authorization_policy::ACCOUNT])
         .map_err(|e|(StatusCode::INTERNAL_SERVER_ERROR,"no permission".to_string()))?;
     
-    let mut conn=pool.connection.lock().unwrap(); //TODO  unwrap error    
+    let mut conn=pool.pool.get().unwrap();//TODO error
 
     // 先不实际删除数据
     let count=diesel::update(
@@ -279,7 +279,7 @@ pub async fn update_consumer(
     auth.require_permissions(vec![authorization_policy::ACCOUNT])
         .map_err(|e|(StatusCode::INTERNAL_SERVER_ERROR,"no permission".to_string()))?;
    
-    let mut conn=pool.connection.lock().unwrap(); //TODO  unwrap error
+    let mut conn=pool.pool.get().unwrap();//TODO error
 
     diesel::update(
         consumers::dsl::consumers
@@ -313,7 +313,7 @@ pub async fn get_consumer(
     auth.require_permissions(vec![authorization_policy::ACCOUNT])
         .map_err(|e|(StatusCode::INTERNAL_SERVER_ERROR,"no permission".to_string()))?;
 
-    let mut conn=pool.connection.lock().unwrap(); //TODO  unwrap error    
+    let mut conn=pool.pool.get().unwrap();//TODO error  
     
     let consumer=consumers::dsl::consumers
         .filter(consumers::dsl::consumer_id.eq(id))

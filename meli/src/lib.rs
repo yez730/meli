@@ -192,7 +192,7 @@ mod test{
     #[test]
     #[ignore]
     fn test_create_or_update_super_user_account(){
-        create_or_update_super_user_account(&mut utils::get_connection());
+        create_or_update_super_user_account(&mut utils::get_connection_pool().get().unwrap());
     }
 
     #[derive(Deserialize,Serialize)]
@@ -237,6 +237,7 @@ mod test{
         a:String,
         b:Option<NaiveDate>,
     }
+
     #[test]
     #[ignore]
     fn test3(){
@@ -244,9 +245,20 @@ mod test{
         // let json1=serde_json::to_string(&input1).unwrap(); //2022-04-18
         // assert_eq!(json1,"");
 
-        let json1=r#"{"a":"123","b":"2022-04-18"}"#;//serde_json::to_string(&input1).unwrap(); //2022-04-18
-        let input1=serde_json::from_str::<Input3>(json1).unwrap();
-        assert_eq!(input1.b,Some(NaiveDate::from_ymd(2022, 4, 20)));
+        // let json1=r#"{"a":"123","b":"2022-04-18"}"#;//serde_json::to_string(&input1).unwrap(); //2022-04-18
+        // let input1=serde_json::from_str::<Input3>(json1).unwrap();
+        // assert_eq!(input1.b,Some(NaiveDate::from_ymd(2022, 4, 20)));
+
     }
 
+    fn fuck<F,P>(f:F)
+    where
+    F:FnOnce(P) -> String,
+    P:Ptrait
+    {
+        
+    }
+    trait Ptrait {
+        fn get_string()->String;
+    }
 }

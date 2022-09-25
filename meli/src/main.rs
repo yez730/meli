@@ -7,13 +7,13 @@ use tower_http::{trace::TraceLayer, cors::Any};
 use tower_http::cors::CorsLayer;
 use tracing_subscriber::{layer::SubscriberExt,util::SubscriberInitExt};
 
-use meli_backend::{ axum_pg_pool::AxumPgPool, models::User, utils::get_connection, handlers::{user_handler::*}};
+use meli_backend::{ axum_pg_pool::AxumPgPool, models::User, utils::get_connection_pool, handlers::{user_handler::*}};
 use uuid::Uuid;
 
 #[tokio::main]
 async fn main(){
     let axum_pg_pool=AxumPgPool{
-        connection:Arc::new(Mutex::new(get_connection()))
+        pool:get_connection_pool()
     };
 
     tracing_subscriber::registry()

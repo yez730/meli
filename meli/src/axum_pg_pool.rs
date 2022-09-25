@@ -14,10 +14,12 @@ use crate::schema::*;
 use diesel::dsl::now;
 use diesel::PgConnection;
 use diesel::prelude::*;
+use diesel::r2d2::ConnectionManager;
+use diesel::r2d2::Pool;
 
 #[derive(Clone)]
 pub struct AxumPgPool{
-    pub connection:Arc<Mutex<PgConnection>>,
+    pub pool:Pool<ConnectionManager<PgConnection>>,
 }
 
 impl std::fmt::Debug for AxumPgPool {
@@ -31,7 +33,7 @@ impl std::fmt::Debug for AxumPgPool {
 #[async_trait]
 impl AxumDatabasePool for AxumPgPool{
     async fn store(&self,session_data:&database_pool::SessionData) -> Result<(), anyhow::Error>{
-        let mut conn=self.connection.lock()
+        let mut conn=self.pool.get()
             .map_err(|e| anyhow!("Get connection error: {}",e))?;
         
         let session=sessions::dsl::sessions
@@ -72,7 +74,7 @@ impl AxumDatabasePool for AxumPgPool{
 
     async fn load(&self, session_id: &Uuid) -> Result<database_pool::SessionData, anyhow::Error>{
         use std::result::Result::Ok;
-        let mut conn=self.connection.lock()
+        let mut conn=self.pool.get()
             .map_err(|e| anyhow!("Get connection error: {}",e))?;
         
         let session=sessions::dsl::sessions

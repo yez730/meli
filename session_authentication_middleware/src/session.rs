@@ -50,16 +50,16 @@ where
         }
     }
 
-    pub async fn sign_in(&mut self,user_id:Uuid){ //TODO &mut 
+    pub async fn sign_in(&mut self,user_id:Uuid){
         if self.axum_session.get_logined_user_id().is_some(){
             self.axum_session.clear(); 
         }
         self.axum_session.set_user_id(user_id);
-        self.refresh_identity(self.database_pool.clone()).await;
+        self.refresh_identity(self.database_pool.clone());
     }
 
     //TODO 新user_id / 权限变更
-     pub async fn refresh_identity(&mut self,p:AuthP){
+    pub fn refresh_identity(&mut self,p:AuthP){
         if let Some(ref user) =self.user{
             let identity_str=serde_json::to_string(&user.load_identity(p));
             if let Ok(identity_str)=identity_str{
@@ -68,7 +68,7 @@ where
         }
     }
 
-    pub fn sign_out(&mut self){
+    pub async fn sign_out(&mut self){
         self.axum_session.clear();
     }
 }
