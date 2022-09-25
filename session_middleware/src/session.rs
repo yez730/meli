@@ -118,7 +118,9 @@ where
         self.session_data.user_id=Some(user_id);
 
 		self.is_modified=true;
+        tracing::error!("is_modified {}",self.is_modified);
         self.session_id.change_session_id_cached_type();
+        tracing::error!("session_id {}",self.session_id.0)
 	}
 
     pub fn get_logined_user_id(&self)->Option<Uuid>{
@@ -149,6 +151,7 @@ where
     }
 
 	pub(crate) async fn commit(&mut self)->Result<(),anyhow::Error>{
+        tracing::error!("begin commit is_modified:{}",self.is_modified);
         if !self.is_modified{
             return Ok(());
         }
@@ -160,7 +163,7 @@ where
                 self.session_data.expiry_time=Local::now()+self.store.config.idle_timeout;
             }
         }
-
+        tracing::error!("begin store:{}",self.is_modified);
         self.store.store(&self.session_data).await?;
         self.is_modified=false;
 

@@ -25,106 +25,14 @@ pub struct User{
     pub data: Option<String>,
 }
 
-#[derive(Queryable)]
-pub struct Permission{
-    pub id: i64,
-
-    pub permission_id: Uuid,
-    pub permission_code: String,
-    pub permission_name :String,
-    pub description: String,
-
-    pub enabled:bool,
-    pub create_time: chrono::DateTime<Local>,
-    pub update_time: chrono::DateTime<Local>,
-    pub data: Option<String>,
-}
-
-#[derive(Queryable)]
-pub struct Role{
-    pub id: i64,
-
-    pub role_id: Uuid,
-    pub role_code: String,
-    pub role_name:String,
-
-    pub permissions:String,
-    pub description:String,
-    pub enabled:bool,
-    pub create_time: chrono::DateTime<Local>,
-    pub update_time: chrono::DateTime<Local>,
-    pub data: Option<String>,
-}
-
-
-#[derive(Insertable)]
-#[diesel(table_name=permissions)]
-pub struct NewPermission<'a>{
-    pub permission_id: &'a Uuid,
-    pub permission_code: &'a str,
-    pub permission_name :&'a str,
-    pub description: &'a str,
-    pub enabled:bool,
-    pub create_time: chrono::DateTime<Local>,
-    pub update_time: chrono::DateTime<Local>,
-    pub data: Option<&'a str>,
-}
-
-#[derive(Queryable)]
-pub struct Session{
-    pub id: i64,
-    pub session_id: Uuid,
-    pub user_id: Uuid,
-    pub init_time: chrono::DateTime<Local>,
-    pub expiry_time: chrono::DateTime<Local>,
-    pub create_time: chrono::DateTime<Local>,
-    pub update_time: chrono::DateTime<Local>,
-    pub data: Option<String>,
-}
-
-#[derive(Insertable)]
-#[diesel(table_name=sessions)]
-pub struct NewSession<'a> {
-    pub session_id: &'a Uuid,
-    pub user_id: &'a Uuid,
-    pub init_time: chrono::DateTime<Local>,
-    pub expiry_time: chrono::DateTime<Local>,
-    pub create_time: chrono::DateTime<Local>,
-    pub update_time: chrono::DateTime<Local>,
-    pub data: Option<&'a str>,
-}
-
-#[derive(Insertable)]
-#[diesel(table_name=users)]
-pub struct NewUser<'a>{
-    pub user_id: &'a Uuid,
-    pub description: &'a str,
-    pub permissions: &'a str,
-    pub roles: &'a str,
-    pub enabled:bool,
-    pub create_time: chrono::DateTime<Local>,
-    pub update_time: chrono::DateTime<Local>,
-    pub data: Option<&'a str>,
-}
-
 #[async_trait]
 impl Authentication<User, AxumPgPool> for User{
-    fn get_user(user_id:Uuid,pool:AxumPgPool)->User{
-        let mut conn=pool.pool.get().unwrap();//TODO error
 
-        users::dsl::users
-            .filter(users::dsl::user_id.eq(user_id))
-            .filter(users::dsl::enabled.eq(true))
-            .get_result::<User>(&mut *conn)
-            .unwrap()
-            //TODO error
-    }
-
-    fn load_identity(&self,pool:AxumPgPool) -> auth_user::Identity{
+    fn load_identity(user_id:Uuid,pool:AxumPgPool) -> auth_user::Identity{
         let mut conn=pool.pool.get().unwrap();//TODO error
 
         let user=users::dsl::users
-            .filter(users::dsl::user_id.eq(self.user_id))
+            .filter(users::dsl::user_id.eq(user_id))
             .filter(users::dsl::enabled.eq(true))
             .get_result::<User>(&mut *conn)
             .unwrap();
@@ -171,6 +79,87 @@ impl Authentication<User, AxumPgPool> for User{
 
         identity
     }
+}
+
+#[derive(Insertable)]
+#[diesel(table_name=users)]
+pub struct NewUser<'a>{
+    pub user_id: &'a Uuid,
+    pub description: &'a str,
+    pub permissions: &'a str,
+    pub roles: &'a str,
+    pub enabled:bool,
+    pub create_time: chrono::DateTime<Local>,
+    pub update_time: chrono::DateTime<Local>,
+    pub data: Option<&'a str>,
+}
+
+#[derive(Queryable)]
+pub struct Permission{
+    pub id: i64,
+
+    pub permission_id: Uuid,
+    pub permission_code: String,
+    pub permission_name :String,
+    pub description: String,
+
+    pub enabled:bool,
+    pub create_time: chrono::DateTime<Local>,
+    pub update_time: chrono::DateTime<Local>,
+    pub data: Option<String>,
+}
+
+#[derive(Queryable)]
+pub struct Role{
+    pub id: i64,
+
+    pub role_id: Uuid,
+    pub role_code: String,
+    pub role_name:String,
+
+    pub permissions:String,
+    pub description:String,
+    pub enabled:bool,
+    pub create_time: chrono::DateTime<Local>,
+    pub update_time: chrono::DateTime<Local>,
+    pub data: Option<String>,
+}
+
+#[derive(Insertable)]
+#[diesel(table_name=permissions)]
+pub struct NewPermission<'a>{
+    pub permission_id: &'a Uuid,
+    pub permission_code: &'a str,
+    pub permission_name :&'a str,
+    pub description: &'a str,
+    pub enabled:bool,
+    pub create_time: chrono::DateTime<Local>,
+    pub update_time: chrono::DateTime<Local>,
+    pub data: Option<&'a str>,
+}
+
+#[derive(Queryable)]
+pub struct Session{
+    pub id: i64,
+    pub session_id: Uuid,
+    pub user_id: Uuid,
+    pub init_time: chrono::DateTime<Local>,
+    pub expiry_time: chrono::DateTime<Local>,
+    pub create_time: chrono::DateTime<Local>,
+    pub update_time: chrono::DateTime<Local>,
+    pub data: Option<String>,
+}
+
+#[derive(Insertable)]
+#[diesel(table_name=sessions)]
+pub struct NewSession<'a> {
+    pub session_id: &'a Uuid,
+    pub user_id: &'a Uuid,
+    pub init_time: chrono::DateTime<Local>,
+    pub expiry_time: chrono::DateTime<Local>,
+    pub create_time: chrono::DateTime<Local>,
+    pub update_time: chrono::DateTime<Local>,
+    pub data: Option<&'a str>,
 }
 
 #[derive(Queryable,Serialize)]
@@ -257,7 +246,6 @@ pub struct NewAccount<'a>{
     pub update_time: chrono::DateTime<Local>,
     pub data: Option<&'a str>,
 }
-
 
 #[derive(Queryable,Serialize)]
 pub struct Merchant{

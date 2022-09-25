@@ -3,7 +3,7 @@ use axum_core::extract::FromRequestParts;
 use axum_session_middleware::{database_pool::AxumDatabasePool, session::AxumSession, constants::SessionKeys};
 use http::{self, request::Parts, StatusCode};
 use uuid::Uuid;
-use std::fmt;
+use std::{fmt::{self, Debug}, marker::PhantomData, sync::{Arc, Mutex}};
 
 use crate::user::Identity;
 
@@ -14,10 +14,10 @@ where
     AuthP: Clone + Send + Sync + fmt::Debug + 'static,
     SessionP: AxumDatabasePool + Clone + fmt::Debug + Sync + Send + 'static,
 {
-    pub user:Option<User>,
-    pub authenticatied_identity: Option<Identity>,
-    pub axum_session: AxumSession<SessionP>,
+    pub identity: Option<Identity>,
+    pub axum_session: Arc<Mutex<AxumSession<SessionP>>>,
     pub database_pool:AuthP,
+    pub phantom_user: PhantomData<User>,
 }
 
 #[async_trait]
@@ -26,18 +26,17 @@ where
     User:Authentication<User,AuthP> + Clone + Send + Sync + 'static,
     AuthP: Clone + Send + Sync + fmt::Debug + 'static,
 {
-    fn get_user(user_id:Uuid,pool:AuthP)->User;
-    fn load_identity(&self,pool:AuthP) -> Identity;
+    fn load_identity(user_id:Uuid,pool:AuthP) -> Identity;
 }
 
 impl<SessionP,AuthP,User> AuthSession<SessionP,AuthP,User>
 where
-    User:Authentication<User,AuthP> + Clone + Send + Sync + 'static,
+    User:Authentication<User,AuthP> + Clone + Send + Sync +Debug,
     AuthP: Clone + Send + Sync + fmt::Debug + 'static,
     SessionP: AxumDatabasePool + Clone + fmt::Debug + Sync + Send + 'static,
 {
     pub fn require_permissions(&self,perms:Vec<&str>)->Result<(),&str>{
-        match self.authenticatied_identity {
+        match self.identity {
             Some(ref identity)=>{
                 let permission_ok=perms.into_iter().all(|p|identity.permission_codes.iter().map(|p|p.as_str()).collect::<Vec<_>>().contains(&p)); //TODO extend predication
                 if permission_ok{
@@ -51,25 +50,27 @@ where
     }
 
     pub async fn sign_in(&mut self,user_id:Uuid){
-        if self.axum_session.get_logined_user_id().is_some(){
-            self.axum_session.clear(); 
+        let mut session=self.axum_session.lock().unwrap();
+        if session.get_logined_user_id().is_some(){
+            session.clear(); 
         }
-        self.axum_session.set_user_id(user_id);
-        self.refresh_identity(self.database_pool.clone());
-    }
+        session.set_user_id(user_id);
 
-    //TODO 新user_id / 权限变更
-    pub fn refresh_identity(&mut self,p:AuthP){
-        if let Some(ref user) =self.user{
-            let identity_str=serde_json::to_string(&user.load_identity(p));
+        //TODO 新user_id / 权限变更 时， refresh_identity
+        if let Some(user_id) =session.get_logined_user_id(){
+            let identity_str=serde_json::to_string(&User::load_identity(user_id,self.database_pool.clone()));
+            tracing::error!("refresh_identity identity_str: {:?}","identity_str");
             if let Ok(identity_str)=identity_str{
-                self.axum_session.set_data(SessionKeys::Identity.to_string(), identity_str); //TODO SessionKeys::Identity.to_string() ??????
+                tracing::error!("begin Ok(identity_str)");
+                session.set_data(SessionKeys::Identity.to_string(), identity_str); //TODO SessionKeys::Identity.to_string() ??????
+                tracing::error!("after Ok(identity_str)");
             }
         }
+        tracing::error!("after refresh_identity");
     }
 
     pub async fn sign_out(&mut self){
-        self.axum_session.clear();
+        self.axum_session.lock().unwrap().clear();
     }
 }
 

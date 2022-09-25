@@ -66,7 +66,7 @@ pub async fn login_by_username(State(pool):State<AxumPgPool>,mut auth: AuthSessi
         .ok();
     
     let response=LoginResponse{
-        identity:user.load_identity(pool.clone()),
+        identity:User::load_identity(login_info.user_id,pool.clone()),
         account,
         consumer,
     };
@@ -80,7 +80,7 @@ pub async fn logout(mut auth: AuthSession< AxumPgPool, AxumPgPool,User>){
 }
 
 pub async fn get_current_identity(auth: AuthSession<AxumPgPool, AxumPgPool,User>)->Result<Json<auth_user::Identity>,(StatusCode,String)>{
-    let identity=auth.authenticatied_identity.ok_or((StatusCode::UNAUTHORIZED,"no login".to_string()))?;
+    let identity=auth.identity.ok_or((StatusCode::UNAUTHORIZED,"no login".to_string()))?;
     Ok(Json(identity))
 }
 
@@ -98,7 +98,7 @@ pub async fn get_consumers(
     auth: AuthSession<AxumPgPool, AxumPgPool,User>,
 )->Result<Json<PaginatedListResponse<Consumer>>,(StatusCode,String)>{
     //检查登录
-    let identity=auth.authenticatied_identity.as_ref().ok_or((StatusCode::UNAUTHORIZED,"no login".to_string()))?;
+    let identity=auth.identity.as_ref().ok_or((StatusCode::UNAUTHORIZED,"no login".to_string()))?;
 
     //检查权限
     auth.require_permissions(vec![authorization_policy::ACCOUNT])
@@ -140,7 +140,7 @@ pub async fn add_consumer(
     Json(req): Json<ConsumerRequest>
 )->Result<(),(StatusCode,String)>{
     //检查登录
-    let identity=auth.authenticatied_identity.as_ref().ok_or((StatusCode::UNAUTHORIZED,"no login".to_string()))?;
+    let identity=auth.identity.as_ref().ok_or((StatusCode::UNAUTHORIZED,"no login".to_string()))?;
 
     //检查权限
     auth.require_permissions(vec![authorization_policy::ACCOUNT])
@@ -236,7 +236,7 @@ pub async fn delete_consumer(
     auth: AuthSession<AxumPgPool, AxumPgPool,User>,
 )->Result<(),(StatusCode,String)>{
     //检查登录
-    let identity=auth.authenticatied_identity.as_ref().ok_or((StatusCode::UNAUTHORIZED,"no login".to_string()))?;
+    let identity=auth.identity.as_ref().ok_or((StatusCode::UNAUTHORIZED,"no login".to_string()))?;
 
     //检查权限
     auth.require_permissions(vec![authorization_policy::ACCOUNT])
@@ -273,7 +273,7 @@ pub async fn update_consumer(
     Json(req): Json<ConsumerRequest>
 )->Result<(),(StatusCode,String)>{
     //检查登录
-    let identity=auth.authenticatied_identity.as_ref().ok_or((StatusCode::UNAUTHORIZED,"no login".to_string()))?;
+    let identity=auth.identity.as_ref().ok_or((StatusCode::UNAUTHORIZED,"no login".to_string()))?;
 
     //检查权限
     auth.require_permissions(vec![authorization_policy::ACCOUNT])
@@ -307,7 +307,7 @@ pub async fn get_consumer(
     auth: AuthSession<AxumPgPool, AxumPgPool,User>,
 )->Result<Json<Consumer>,(StatusCode,String)>{
     //检查登录
-    let identity=auth.authenticatied_identity.as_ref().ok_or((StatusCode::UNAUTHORIZED,"no login".to_string()))?;
+    let identity=auth.identity.as_ref().ok_or((StatusCode::UNAUTHORIZED,"no login".to_string()))?;
 
     //检查权限
     auth.require_permissions(vec![authorization_policy::ACCOUNT])

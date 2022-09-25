@@ -15,7 +15,7 @@ use std::{
     convert::Infallible,
     fmt,
     marker::PhantomData,
-    task::{Context, Poll},
+    task::{Context, Poll}, sync::{Mutex, Arc},
 };
 use tower_service::Service;
 
@@ -64,7 +64,7 @@ where
         let mut ready_inner = std::mem::replace(&mut self.inner, not_ready_inner); //TODO 
 
         Box::pin(async move {
-            let axum_session = match req.extensions().get::<AxumSession<SessionP>>().cloned() { //TODO P需要限定？ PhantomData？
+            let axum_session = match req.extensions().get::<Arc<Mutex<AxumSession<SessionP>>>>().cloned() { //TODO P需要限定？ PhantomData？
                 Some(session) => session,
                 None => {
                     return Ok(Response::builder()
@@ -73,30 +73,21 @@ where
                         .unwrap());
                 }
             };
-
-            let (i,u):(Option<Identity>,Option<User>)=if let Some(user_id)=axum_session.get_logined_user_id(){
-                match serde_json::from_str::<Identity>(axum_session.get_identity_str()) {
-                    Ok(identity)=>{
-                        let user=User::get_user(user_id,pool.clone());
-                        (Some(identity),Some(user))
-                    }
-                    Err(e)=>{
-                        tracing::error!("get identity error: {}",e); //TODO .....
-                        (None,None)
-                    }
-                }
-            } else{
-                (None,None)
+            // let mut session=axum_session.lock().unwrap();
+            let identity={
+                let session=axum_session.lock().unwrap();
+                session.get_logined_user_id()
+                .map(|_|serde_json::from_str::<Identity>(session.get_identity_str()).unwrap())
             };
-
-            let auth_session = AuthSession {
-                user:u,
-                authenticatied_identity:i,
+            tracing::error!("identity---------{:?}",identity);
+            let auth_session:AuthSession<SessionP,AuthP,User> = AuthSession {
+                phantom_user:PhantomData::default(),
+                identity,
                 axum_session: axum_session,
                 database_pool:pool.clone(),
             };
-
-            req.extensions_mut().insert(auth_session.clone());
+           
+            req.extensions_mut().insert(auth_session);
 
             Ok(ready_inner.call(req).await?.map(body::boxed))
         })

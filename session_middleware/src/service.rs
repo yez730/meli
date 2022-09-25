@@ -14,7 +14,7 @@ use std::{
     convert::Infallible,
     fmt::{self, Debug, Formatter},
     marker::{Send, Sync},
-    task::{Context, Poll},
+    task::{Context, Poll}, sync::{Mutex, Arc},
 };
 use tower_service::Service;
 use chrono::{Local};
@@ -59,7 +59,7 @@ where
         Box::pin(async move {
             let session_id=req.headers().get(SESSIONID).and_then(|id|id.to_str().ok());
            
-            let mut session = AxumSession::load_or_init(&store, session_id).await.unwrap_or_else(|e|{
+            let session = AxumSession::load_or_init(&store, session_id).await.unwrap_or_else(|e|{
                 tracing::error!("load_or_init error: {}",e);
 
                 let session_id=SessionId::init_session_id();
@@ -71,20 +71,27 @@ where
                     is_modified:false,
                 }
             });
+            // tracing::error!("session-------------{:?}",session);
+            store.memory_store.retain(|_k, v|  v.expiry_time>Local::now());
 
-            store.memory_store.retain(|_k, v| v.init_time + store.config.memory_clear_timeout > Local::now() && v.user_id.is_none() || v.expiry_time>Local::now());
+            let session=Arc::new(Mutex::new(session)); // 在res返回中取不到同一个Extension
 
-            req.extensions_mut().insert(session.clone());
+            req.extensions_mut().insert(Arc::clone(&session));
 
-            let mut response = ready_inner.call(req).await?.map(body::boxed);
+            let mut res = ready_inner.call(req).await?.map(body::boxed);
 
+            tracing::error!("got res");
+            //TODO tokio mutex -> 跨await引用  safe
+            let session=Arc::clone(&session);
+            
+            let mut session=session.lock().unwrap().to_owned();
             let _=session.commit().await.map_err(|e|{
                 tracing::error!("session commit error: {}",e);
             });
 
-            response.headers_mut().insert(SESSIONID, HeaderValue::from_str(&session.session_id.0).unwrap());
+             res.headers_mut().insert(SESSIONID, HeaderValue::from_str(session.session_id.0.as_str()).unwrap());
 
-            Ok(response)
+            Ok(res)
         })
     }
 }
