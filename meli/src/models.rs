@@ -25,7 +25,6 @@ pub struct User{
 
 #[async_trait]
 impl Authentication<User, AxumPgPool> for User{
-
     fn load_identity(user_id:Uuid,pool:AxumPgPool) -> auth_user::Identity{
         let mut conn=pool.pool.get().unwrap();//TODO error
 

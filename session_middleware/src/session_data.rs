@@ -7,7 +7,7 @@ use uuid::Uuid;
 pub(crate) struct AxumSessionData{
     pub(crate) session_id:Uuid,
 
-    //Some: 登录用户 / None: 匿名用户
+    // 登录用户 / 匿名用户
     pub(crate) user_id:Option<Uuid>,
     pub(crate) init_time:DateTime<Local>,
     pub(crate) expiry_time:DateTime<Local>,

@@ -19,7 +19,7 @@ use std::{
 use tower_service::Service;
 use chrono::{Local};
 
-use crate::{database_pool::AxumDatabasePool, session_store::AxumSessionStore, session::{AxumSession, SessionId}, session_data::AxumSessionData, constants::{SESSIONID}};
+use crate::{database_pool::AxumDatabasePool, session_store::AxumSessionStore, session::AxumSession, constants::SESSIONID};
 
 #[derive(Clone)]
 pub struct AxumSessionService<S, T>
@@ -59,17 +59,7 @@ where
         Box::pin(async move {
             let session_id=req.headers().get(SESSIONID).and_then(|id|id.to_str().ok());
            
-            let session = AxumSession::load_or_init(&store, session_id).await.unwrap_or_else(|e|{
-
-                let session_id=SessionId::init_session_id();
-                
-                AxumSession{
-                    session_id:session_id.clone(),
-                    store:store.clone(),
-                    session_data:AxumSessionData::init(session_id.get_session_guid(), store.config.memory_clear_timeout),
-                    is_modified:false,
-                }
-            });
+            let session = AxumSession::load_or_init(&store, session_id).await;
             store.memory_store.retain(|_k, v|  v.expiry_time>Local::now());
 
             let session=Arc::new(Mutex::new(session)); // 在res返回中取不到同一个Extension
@@ -78,7 +68,6 @@ where
 
             let mut res = ready_inner.call(req).await?.map(body::boxed);
 
-            //TODO tokio mutex -> 跨await引用  safe
             let session=Arc::clone(&session);
             
             let mut session=session.lock().unwrap().to_owned();
@@ -86,7 +75,7 @@ where
                 tracing::error!("session commit error: {}",e);
             });
 
-             res.headers_mut().insert(SESSIONID, HeaderValue::from_str(session.session_id.0.as_str()).unwrap());
+            res.headers_mut().insert(SESSIONID, HeaderValue::from_str(session.session_id.0.as_str()).unwrap());
 
             Ok(res)
         })

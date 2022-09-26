@@ -4,7 +4,7 @@ use axum_core::{
     BoxError,
 };
 use axum_session_middleware::{
-    session::AxumSession, database_pool::AxumDatabasePool,
+    session::AxumSession, database_pool::AxumDatabasePool, constants::session_keys,
 };
 use bytes::Bytes;
 use futures::future::BoxFuture;
@@ -64,7 +64,7 @@ where
         let mut ready_inner = std::mem::replace(&mut self.inner, not_ready_inner); //TODO 
 
         Box::pin(async move {
-            let axum_session = match req.extensions().get::<Arc<Mutex<AxumSession<SessionP>>>>().cloned() { //TODO P需要限定？ PhantomData？
+            let axum_session = match req.extensions().get::<Arc<Mutex<AxumSession<SessionP>>>>().cloned() {
                 Some(session) => session,
                 None => {
                     return Ok(Response::builder()
@@ -73,12 +73,16 @@ where
                         .unwrap());
                 }
             };
-            // let mut session=axum_session.lock().unwrap();
+
             let identity={
                 let session=axum_session.lock().unwrap();
-                session.get_logined_user_id()
-                .map(|_|serde_json::from_str::<Identity>(session.get_identity_str()).unwrap())
+                if session.get_user_id().is_some() {
+                    Some(serde_json::from_str::<Identity>(session.get_data(session_keys::IDENTITY)).unwrap())
+                } else {
+                    None
+                }
             };
+            
             let auth_session:AuthSession<SessionP,AuthP,User> = AuthSession {
                 phantom_user:PhantomData::default(),
                 identity,

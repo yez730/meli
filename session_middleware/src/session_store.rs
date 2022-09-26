@@ -40,6 +40,7 @@ where
         session_data:&AxumSessionData
     ) -> Result<(), anyhow::Error> {
         let sess=session_data.clone();
+        
         if let Some(user_id)=sess.user_id {
             let session_data=SessionData{
                 session_id:sess.session_id,
@@ -56,7 +57,7 @@ where
         Ok(())
     }
 
-    pub(crate) async fn load_or_init(&self, session_id: &Uuid) -> Result<Option<AxumSessionData>, anyhow::Error>{
+    pub(crate) async fn load_or_init(&self, session_id: &Uuid) -> Option<AxumSessionData>{
         use std::result::Result::Ok;
         
         match self.database_pool.load(&session_id).await {
@@ -68,19 +69,19 @@ where
                     expiry_time:session_data.expiry_time,
                     data:session_data.data
                 };
-                return Ok(Some(sess));
+                return Some(sess);
             }
             Err(_)=>{
                 match self.memory_store.get(&session_id) {
                     Some(s)=>{
-                        return Ok(Some(s.clone()));
+                        return Some(s.clone());
                     }
                     None=>{
                         let sess=AxumSessionData::init(session_id.clone(),self.config.memory_clear_timeout);
                         
                         //TODO 膨胀
                         self.memory_store.insert(sess.session_id, sess.clone());
-                        return Ok(Some(sess));
+                        return Some(sess);
                     }
                 };
             }

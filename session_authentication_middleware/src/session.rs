@@ -38,7 +38,9 @@ where
     pub fn require_permissions(&self,perms:Vec<&str>)->Result<(),&str>{
         match self.identity {
             Some(ref identity)=>{
-                let permission_ok=perms.into_iter().all(|p|identity.permission_codes.iter().map(|p|p.as_str()).collect::<Vec<_>>().contains(&p)); //TODO extend predication
+                let permission_ok=perms.into_iter()
+                    .all(|p|identity.permission_codes.iter().map(|p|p.as_str()).collect::<Vec<_>>().contains(&p)); //TODO extend predication
+                
                 if permission_ok{
                     Ok(())
                 } else {
@@ -50,18 +52,25 @@ where
     }
 
     pub async fn sign_in(&mut self,user_id:Uuid){
-        let mut session=self.axum_session.lock().unwrap();
-        if session.get_logined_user_id().is_some(){
-            session.clear(); 
-        }
-        session.set_user_id(user_id);
-
-        //TODO 新user_id / 权限变更 时， refresh_identity
-        if let Some(user_id) =session.get_logined_user_id(){
-            let identity_str=serde_json::to_string(&User::load_identity(user_id,self.database_pool.clone()));
-            if let Ok(identity_str)=identity_str{
-                session.set_data(session_keys::IDENTITY.to_string(), identity_str); //TODO SessionKeys::Identity.to_string() ??????
+        {
+            let mut session=self.axum_session.lock().unwrap();
+            if session.get_user_id().is_some(){
+                session.clear(); 
             }
+            session.set_user_id(user_id);
+        }
+
+        self.refresh_identity().await;
+    }
+
+    // 新user_id 或 变更权限 时， 需要refresh_identity
+    pub async fn refresh_identity(&mut self){
+        let mut session=self.axum_session.lock().unwrap();
+
+        if let Some(user_id) =session.get_user_id(){
+            let identity=User::load_identity(user_id,self.database_pool.clone());
+
+            session.set_data(session_keys::IDENTITY.to_string(), serde_json::to_string(&identity).unwrap());
         }
     }
 
