@@ -17,9 +17,11 @@ pub struct Permission{
     pub permission_code: String,
     pub permission_name :String,
     pub description: String,
+    #[serde(skip)]
     pub enabled:bool,
     pub create_time: chrono::DateTime<Local>,
     pub update_time: chrono::DateTime<Local>,
+    #[serde(skip)]
     pub data: Option<String>,
 }
 
@@ -31,8 +33,10 @@ pub struct Role{
 
     pub permissions:String,
     pub description:String,
+    #[serde(skip)]
     pub enabled:bool,
     pub create_time: chrono::DateTime<Local>,
     pub update_time: chrono::DateTime<Local>,
+    #[serde(skip)]
     pub data: Option<String>,
 }
