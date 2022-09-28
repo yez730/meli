@@ -144,7 +144,7 @@ pub async fn add_consumer(
     //检查权限
     auth.require_permissions(vec![authorization_policy::ACCOUNT])
         .map_err(|_|(StatusCode::INTERNAL_SERVER_ERROR,"no permission".to_string()))?;
-        
+    
     let mut conn=pool.pool.get().unwrap();//TODO error
     
     //添加 TODO insert data with enabled settting false, finally set to true.
@@ -279,7 +279,7 @@ pub async fn update_consumer(
    
     let mut conn=pool.pool.get().unwrap();//TODO error
 
-    diesel::update(
+    let num=diesel::update(
         consumers::dsl::consumers
         .filter(consumers::dsl::consumer_id.eq(id))
         .filter(consumers::dsl::enabled.eq(true))
@@ -295,6 +295,10 @@ pub async fn update_consumer(
         tracing::error!("{}",e.to_string());
         (StatusCode::INTERNAL_SERVER_ERROR,e.to_string())
     })?;
+
+    if num !=1 {
+        tracing::error!("update_consumer affected num: {}",num);
+    }
     
     Ok(())
 }

@@ -27,7 +27,7 @@ async fn main(){
         .route("/logout", get(logout))
         .route("/identity", get(get_current_identity))
         .route("/consumers", get(get_consumers).post(add_consumer))
-        .route("/consumers/:c_id", get(get_consumer).post(update_consumer).delete(delete_consumer))
+        .route("/consumer/:c_id", get(get_consumer).post(update_consumer).delete(delete_consumer))
         .layer(CorsLayer::permissive())
         .layer(AuthSessionLayer::<AxumPgPool, AxumPgPool,User>::new(axum_pg_pool.clone()))
         .layer(AxumSessionLayer::new(AxumSessionStore::new(axum_pg_pool.clone())))
