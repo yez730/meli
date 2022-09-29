@@ -111,8 +111,7 @@ fn get_metadata<ReqBody>(req:&Request<ReqBody>,name:&str,config:AxumSessionConfi
 }
 
 fn update_metadata(res:&mut Response<BoxBody>,name:&'static str,value:&str,config:AxumSessionConfig){
-    res.headers_mut().insert(name, HeaderValue::from_str(value).unwrap()).unwrap();
-
+    res.headers_mut().insert(name, HeaderValue::from_str(value).unwrap());
     let mut cookies = CookieJar::new();
 
     cookies.add_cookie(

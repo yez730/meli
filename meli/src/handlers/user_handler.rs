@@ -112,7 +112,7 @@ pub async fn get_consumers(
             .into_boxed();
         if let Some(key)=p.key.as_ref(){
             query=query
-                .filter(consumers::dsl::cellphone.ilike(format!("{key}%")).or(consumers::dsl::real_name.ilike(format!("{key}%"))));   
+                .filter(consumers::dsl::cellphone.ilike(format!("%{key}%")).or(consumers::dsl::real_name.ilike(format!("%{key}%"))));   
         }
         query
     };
