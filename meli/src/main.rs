@@ -1,6 +1,6 @@
-use std::{net::SocketAddr};
+use std::{net::SocketAddr, str::FromStr};
 
-use axum::{Router, routing::{get, post}};
+use axum::{Router, routing::{get, post}, http::{HeaderValue, header, Method}};
 use axum_session_authentication_middleware::layer::AuthSessionLayer;
 use axum_session_middleware::{layer::AxumSessionLayer, session_store::AxumSessionStore};
 use tower_http::{trace::TraceLayer, cors::Any};
@@ -28,7 +28,11 @@ async fn main(){
         .route("/identity", get(get_current_identity))
         .route("/consumers", get(get_consumers).post(add_consumer))
         .route("/consumer/:c_id", get(get_consumer).post(update_consumer).delete(delete_consumer))
-        .layer(CorsLayer::permissive())
+        .layer(CorsLayer::new()
+            .allow_origin("http://192.168.8.108:8080".parse::<HeaderValue>().unwrap(),)
+            .allow_headers([header::CONTENT_TYPE,header::HeaderName::from_str("credentials").unwrap(),header::HeaderName::from_str("X-SID").unwrap()])
+            .allow_methods([Method::GET,Method::POST,Method::DELETE])
+            .allow_credentials(true))
         .layer(AuthSessionLayer::<AxumPgPool, AxumPgPool,User>::new(axum_pg_pool.clone()))
         .layer(AxumSessionLayer::new(AxumSessionStore::new(axum_pg_pool.clone())))
         .layer(TraceLayer::new_for_http());
