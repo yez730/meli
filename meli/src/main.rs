@@ -28,11 +28,21 @@ async fn main(){
         .route("/identity", get(get_current_identity))
         .route("/consumers", get(get_consumers).post(add_consumer))
         .route("/consumer/:c_id", get(get_consumer).post(update_consumer).delete(delete_consumer))
+
+        
         .layer(CorsLayer::new()
             .allow_origin("http://192.168.8.108:8080".parse::<HeaderValue>().unwrap(),)
-            .allow_headers([header::CONTENT_TYPE,header::HeaderName::from_str("credentials").unwrap(),header::HeaderName::from_str("X-SID").unwrap()])
+            .allow_headers([
+                header::CONTENT_TYPE,
+                header::HeaderName::from_str("X-SID").unwrap(),
+                ])
             .allow_methods([Method::GET,Method::POST,Method::DELETE])
-            .allow_credentials(true))
+            .expose_headers([header::HeaderName::from_str("X-SID").unwrap(),]) //TODO delete when using only cookie auth?
+            .allow_credentials(true)
+        )
+      
+        // .route_layer(axum::middleware::from_fn(temporay_add_cors_header)) // 
+
         .layer(AuthSessionLayer::<AxumPgPool, AxumPgPool,User>::new(axum_pg_pool.clone()))
         .layer(AxumSessionLayer::new(AxumSessionStore::new(axum_pg_pool.clone())))
         .layer(TraceLayer::new_for_http());
@@ -45,3 +55,17 @@ async fn main(){
         .await
         .unwrap();
 }
+
+// Access-Control-Allow-Private-Network true // TODO delete
+// async fn temporay_add_cors_header<B>(req: axum::http::Request<B>, next: axum::middleware::Next<B>) -> Result<axum::response::Response, axum::http::StatusCode> {
+//     let (parts, body) = req.into_parts();
+
+//     if parts.method == Method::OPTIONS{
+//         let mut res=next.run(axum::http::Request::from_parts(parts, body)).await;
+//         res.headers_mut().insert("Access-Control-Allow-Private-Network", HeaderValue::from_str("true").unwrap());
+//         Ok(res)
+//     } else {
+//         let res=next.run(axum::http::Request::from_parts(parts, body)).await;
+//         Ok(res)
+//     }
+// }
