@@ -22,8 +22,6 @@ async fn main(){
         pool:get_connection_pool()
     };
 
-    let config=;
-
     let app=Router::with_state(axum_pg_pool.clone())
         .route("/login", post(login_by_username))
         .route("/logout", get(logout))
