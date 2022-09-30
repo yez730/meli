@@ -6,11 +6,13 @@ use axum_session_middleware::{layer::AxumSessionLayer, session_store::AxumSessio
 use tower_http::{trace::TraceLayer, cors::Any};
 use tower_http::cors::CorsLayer;
 use tracing_subscriber::{layer::SubscriberExt,util::SubscriberInitExt};
-
+use dotenvy::dotenv;
 use meli_backend::{ axum_pg_pool::AxumPgPool, models::User, utils::get_connection_pool, handlers::{user_handler::*}};
 
 #[tokio::main]
 async fn main(){
+    dotenv().expect("Cannot find .env file");
+    
     tracing_subscriber::registry()
         .with(tracing_subscriber::EnvFilter::new(
             std::env::var("RUST_LOG").unwrap_or("meli_backend=trace,axum_session_authentication_middleware=trace,axum_session_middleware=trace".into()),
@@ -35,7 +37,6 @@ async fn main(){
                 header::HeaderName::from_str("X-SID").unwrap(),
                 ])
             .allow_methods([Method::GET,Method::POST,Method::DELETE])
-            // .expose_headers([header::HeaderName::from_str("X-SID").unwrap(),]) //TODO delete when using only cookie auth?
             .allow_credentials(true)
         )
         .layer(AuthSessionLayer::<AxumPgPool, AxumPgPool,User>::new(axum_pg_pool.clone()))
