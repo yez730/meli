@@ -2,7 +2,7 @@ use std::{net::SocketAddr, str::FromStr};
 
 use axum::{Router, routing::{get, post}, http::{HeaderValue, header, Method}};
 use axum_session_authentication_middleware::layer::AuthSessionLayer;
-use axum_session_middleware::{layer::AxumSessionLayer, session_store::AxumSessionStore};
+use axum_session_middleware::{layer::AxumSessionLayer, session_store::AxumSessionStore, config::AxumSessionConfig};
 use tower_http::{trace::TraceLayer, cors::Any};
 use tower_http::cors::CorsLayer;
 use tracing_subscriber::{layer::SubscriberExt,util::SubscriberInitExt};
@@ -22,6 +22,8 @@ async fn main(){
         pool:get_connection_pool()
     };
 
+    let config=AxumSessionConfig::default().with_cookie_domain("http://127.0.0.1");
+
     let app=Router::with_state(axum_pg_pool.clone())
         .route("/login", post(login_by_username))
         .route("/logout", get(logout))
@@ -39,7 +41,7 @@ async fn main(){
             .allow_credentials(true)
         )
         .layer(AuthSessionLayer::<AxumPgPool, AxumPgPool,User>::new(axum_pg_pool.clone()))
-        .layer(AxumSessionLayer::new(AxumSessionStore::new(axum_pg_pool.clone())))
+        .layer(AxumSessionLayer::new(AxumSessionStore::new(axum_pg_pool.clone(),config)))
         .layer(TraceLayer::new_for_http());
 
     let addr=SocketAddr::from(([127,0,0,1],3000));

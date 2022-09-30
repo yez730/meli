@@ -23,6 +23,20 @@ pub struct AxumSessionConfig{
     pub(crate) key: Option<Key>,
 }
 
+impl AxumSessionConfig{
+    #[must_use]
+    pub fn with_cookie_domain(mut self,name: impl Into<Cow<'static, str>>)->Self{
+        self.cookie_domain=Some(name.into());
+        self
+    }
+
+    #[must_use]
+    pub fn with_key(mut self, key: Key) -> Self {
+        self.key = Some(key);
+        self
+    }
+}
+
 impl std::fmt::Debug for AxumSessionConfig {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("AxumSessionConfig")

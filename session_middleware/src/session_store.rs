@@ -24,11 +24,11 @@ where
     T: AxumDatabasePool + Clone + Debug + Sync + Send + 'static,
 {
     #[inline]
-    pub fn new(database: T) -> Self {
+    pub fn new(database: T,config:AxumSessionConfig) -> Self {
         Self {
             database_pool:database,
             memory_store: Default::default(),
-            config: Default::default(),
+            config: config,
         }
     }
     pub fn with_config(&mut self,config: AxumSessionConfig){
