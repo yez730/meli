@@ -22,7 +22,7 @@ async fn main(){
         pool:get_connection_pool()
     };
 
-    let config=AxumSessionConfig::default().with_cookie_domain("http://127.0.0.1");
+    let config=AxumSessionConfig::default().with_cookie_domain("127.0.0.1");
 
     let app=Router::with_state(axum_pg_pool.clone())
         .route("/login", post(login_by_username))
