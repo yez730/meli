@@ -22,7 +22,7 @@ async fn main(){
         pool:get_connection_pool()
     };
 
-    let config=AxumSessionConfig::default().with_cookie_domain("127.0.0.1");
+    let config=;
 
     let app=Router::with_state(axum_pg_pool.clone())
         .route("/login", post(login_by_username))
@@ -37,11 +37,14 @@ async fn main(){
                 header::HeaderName::from_str("X-SID").unwrap(),
                 ])
             .allow_methods([Method::GET,Method::POST,Method::DELETE])
-            .expose_headers([header::HeaderName::from_str("X-SID").unwrap(),]) //TODO delete when using only cookie auth?
+            // .expose_headers([header::HeaderName::from_str("X-SID").unwrap(),]) //TODO delete when using only cookie auth?
             .allow_credentials(true)
         )
         .layer(AuthSessionLayer::<AxumPgPool, AxumPgPool,User>::new(axum_pg_pool.clone()))
-        .layer(AxumSessionLayer::new(AxumSessionStore::new(axum_pg_pool.clone(),config)))
+        .layer(AxumSessionLayer::new(
+            AxumSessionStore::new(axum_pg_pool.clone(),
+            AxumSessionConfig::default().with_cookie_domain("127.0.0.1"))
+        ))
         .layer(TraceLayer::new_for_http());
 
     let addr=SocketAddr::from(([127,0,0,1],3000));
