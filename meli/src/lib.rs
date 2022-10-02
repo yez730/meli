@@ -2,7 +2,7 @@ pub mod models;
 pub mod schema;
 pub mod axum_pg_pool;
 pub mod utils;
-pub mod login_managers;
+mod login_manager;
 pub mod authorization_policy;
 pub mod handlers;
 
@@ -13,7 +13,7 @@ use uuid::Uuid;
 use diesel::PgConnection;
 use diesel::prelude::*;
 
-pub fn create_or_update_super_user_account(conn:&mut PgConnection){
+pub fn create_or_update_super_user_barber(conn:&mut PgConnection){
     use crate::schema::*;
 
     // 1. insert merchant
@@ -34,8 +34,8 @@ pub fn create_or_update_super_user_account(conn:&mut PgConnection){
     .unwrap();
     
     // 2.1 insert user
-    let mut perms=authorization_policy::DEFAULT_PERMISSIONS_OF_MERCHANT_ACCOUNT.to_vec();
-    perms.push(authorization_policy::ACCOUNT); //商户用户权限
+    let mut perms=authorization_policy::DEFAULT_PERMISSIONS_OF_MERCHANT_BARBER.to_vec();
+    perms.push(authorization_policy::BARBER); //商户用户权限
     
     let perm_ids=permissions::dsl::permissions
     .filter(permissions::dsl::permission_code.eq_any(perms)) 
@@ -59,10 +59,10 @@ pub fn create_or_update_super_user_account(conn:&mut PgConnection){
     .execute(conn)
     .unwrap();
 
-    // 2.1 insert account
-    let new_account=NewAccount{
+    // 2.1 insert barber
+    let new_barber=NewBarber{
         user_id: &user_id,
-        account_id: &Uuid::new_v4(),
+        barber_id: &Uuid::new_v4(),
         merchant_id: &merchant_id,
         cellphone:"13764197590",
         email:None,
@@ -72,15 +72,15 @@ pub fn create_or_update_super_user_account(conn:&mut PgConnection){
         update_time: Local::now(),
         data: None,
     };
-    diesel::insert_into(accounts::table)
-    .values(&new_account)
+    diesel::insert_into(barbers::table)
+    .values(&new_barber)
     .execute(conn)
     .unwrap();
 
     // 3.1 add login info
     let l_i_1= NewLoginInfo{
         login_info_id: &Uuid::new_v4(),
-        login_info_account: "13764197590",
+        login_info_barber: "13764197590",
         login_info_type: "Cellphone",
         user_id: &user_id,
         enabled: true,
@@ -89,7 +89,7 @@ pub fn create_or_update_super_user_account(conn:&mut PgConnection){
     };
     let l_i_2=NewLoginInfo{
         login_info_id: &Uuid::new_v4(),
-        login_info_account: "yez",
+        login_info_barber: "yez",
         login_info_type: "Username",
         user_id: &user_id,
         enabled: true,
@@ -189,8 +189,8 @@ mod test{
 
     #[test]
     #[ignore]
-    fn test_create_or_update_super_user_account(){
-        create_or_update_super_user_account(&mut utils::get_connection_pool().get().unwrap());
+    fn test_create_or_update_super_user_barber(){
+        create_or_update_super_user_barber(&mut utils::get_connection_pool().get().unwrap());
     }
 
     #[derive(Deserialize,Serialize)]

@@ -1,9 +1,9 @@
 -- Your SQL goes here
 
-CREATE TABLE accounts (
+CREATE TABLE barbers (
     id BIGSERIAL PRIMARY KEY,
     user_id UUID NOT NULL,
-    account_id UUID NOT NULL,
+    barber_id UUID NOT NULL,
     merchant_id UUID NOT NULL,
     cellphone VARCHAR NOT NULL,
     email VARCHAR NULL,
@@ -14,20 +14,20 @@ CREATE TABLE accounts (
     data TEXT NULL
 );
 
-CREATE UNIQUE INDEX accounts_user_id_key ON accounts
+CREATE UNIQUE INDEX barbers_user_id_key ON barbers
 (user_id);
 
-CREATE UNIQUE INDEX accounts_account_id_key ON accounts
-(account_id);
+CREATE UNIQUE INDEX barbers_barber_id_key ON barbers
+(barber_id);
 
-CREATE INDEX accounts_merchant_id_idx ON accounts
+CREATE INDEX barbers_merchant_id_idx ON barbers
 (merchant_id);
 
-CREATE INDEX accounts_cellphone_idx ON accounts
+CREATE INDEX barbers_cellphone_idx ON barbers
 (cellphone);
 
-CREATE INDEX accounts_email_idx ON accounts
+CREATE INDEX barbers_email_idx ON barbers
 (email);
 
-CREATE INDEX accounts_enabled_idx ON accounts
+CREATE INDEX barbers_enabled_idx ON barbers
 (enabled);

@@ -1,10 +1,10 @@
 // @generated automatically by Diesel CLI.
 
 diesel::table! {
-    accounts (id) {
+    barbers (id) {
         id -> Int8,
         user_id -> Uuid,
-        account_id -> Uuid,
+        barber_id -> Uuid,
         merchant_id -> Uuid,
         cellphone -> Varchar,
         email -> Nullable<Varchar>,
@@ -17,10 +17,23 @@ diesel::table! {
 }
 
 diesel::table! {
-    consumers (id) {
+    login_infos (id) {
+        id -> Int8,
+        login_info_id -> Uuid,
+        login_info_barber -> Varchar,
+        login_info_type -> Varchar,
+        user_id -> Uuid,
+        enabled -> Bool,
+        create_time -> Timestamptz,
+        update_time -> Timestamptz,
+    }
+}
+
+diesel::table! {
+    members (id) {
         id -> Int8,
         user_id -> Uuid,
-        consumer_id -> Uuid,
+        member_id -> Uuid,
         cellphone -> Varchar,
         real_name -> Nullable<Varchar>,
         gender -> Nullable<Varchar>,
@@ -34,25 +47,34 @@ diesel::table! {
 }
 
 diesel::table! {
-    login_infos (id) {
-        id -> Int8,
-        login_info_id -> Uuid,
-        login_info_account -> Varchar,
-        login_info_type -> Varchar,
-        user_id -> Uuid,
-        enabled -> Bool,
-        create_time -> Timestamptz,
-        update_time -> Timestamptz,
-    }
-}
-
-diesel::table! {
     merchants (id) {
         id -> Int8,
         merchant_id -> Uuid,
         merchant_name -> Varchar,
         company_name -> Nullable<Varchar>,
         credential_no -> Nullable<Varchar>,
+        enabled -> Bool,
+        create_time -> Timestamptz,
+        update_time -> Timestamptz,
+        data -> Nullable<Text>,
+    }
+}
+
+diesel::table! {
+    orders (id) {
+        id -> Int8,
+        order_id -> Uuid,
+        merchant_id -> Uuid,
+        date -> Date,
+        start_time -> Time,
+        end_time -> Time,
+        consumer_type -> Varchar,
+        member_id -> Nullable<Uuid>,
+        barber_id -> Uuid,
+        service_type_id -> Uuid,
+        status -> Varchar,
+        payment_type -> Varchar,
+        amount -> Money,
         enabled -> Bool,
         create_time -> Timestamptz,
         update_time -> Timestamptz,
@@ -79,6 +101,19 @@ diesel::table! {
         permission_code -> Varchar,
         permission_name -> Varchar,
         description -> Text,
+        enabled -> Bool,
+        create_time -> Timestamptz,
+        update_time -> Timestamptz,
+        data -> Nullable<Text>,
+    }
+}
+
+diesel::table! {
+    recharge_records (id) {
+        id -> Int8,
+        recharge_record_id -> Uuid,
+        member_id -> Uuid,
+        amount -> Money,
         enabled -> Bool,
         create_time -> Timestamptz,
         update_time -> Timestamptz,
@@ -129,12 +164,14 @@ diesel::table! {
 }
 
 diesel::allow_tables_to_appear_in_same_query!(
-    accounts,
-    consumers,
+    barbers,
     login_infos,
+    members,
     merchants,
+    orders,
     password_login_providers,
     permissions,
+    recharge_records,
     roles,
     sessions,
     users,

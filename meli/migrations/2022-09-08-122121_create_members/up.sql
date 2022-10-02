@@ -1,9 +1,9 @@
 -- Your SQL goes here
 
-CREATE TABLE consumers (
+CREATE TABLE members (
     id BIGSERIAL PRIMARY KEY,
     user_id UUID NOT NULL,
-    consumer_id UUID NOT NULL,
+    member_id UUID NOT NULL,
     cellphone VARCHAR NOT NULL,
     real_name VARCHAR NULL,
     gender VARCHAR NULL,
@@ -15,14 +15,14 @@ CREATE TABLE consumers (
     data TEXT NULL
 );
 
-CREATE UNIQUE INDEX consumers_user_id_key ON consumers
+CREATE UNIQUE INDEX members_user_id_key ON members
 (user_id);
 
-CREATE UNIQUE INDEX consumers_consumer_id_key ON consumers
-(consumer_id);
+CREATE UNIQUE INDEX members_member_id_key ON members
+(member_id);
 
-CREATE INDEX consumers_cellphone_idx ON consumers
+CREATE INDEX members_cellphone_idx ON members
 (cellphone);
 
-CREATE INDEX consumers_enabled_idx ON consumers
+CREATE INDEX members_enabled_idx ON members
 (enabled);

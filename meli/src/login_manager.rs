@@ -10,9 +10,9 @@ pub enum LoginInfoType{
 }
 
 //通过登录名、手机号、邮箱或其它唯一标识和登录方式获取登录信息
-pub fn get_login_info(account:String,conn:&mut PgConnection)->Result<LoginInfo,anyhow::Error>{
+pub fn get_login_info(barber:String,conn:&mut PgConnection)->Result<LoginInfo,anyhow::Error>{
     login_infos::dsl::login_infos
-        .filter(login_infos::login_info_account.eq(account))
+        .filter(login_infos::login_info_barber.eq(barber))
         .filter(login_infos::enabled.eq(true))
         .get_result::<LoginInfo>(conn)
         .map_err(|e|anyhow!(e.to_string()))

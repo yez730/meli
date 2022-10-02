@@ -160,12 +160,12 @@ pub struct NewSession<'a> {
 }
 
 #[derive(Queryable,Serialize)]
-pub struct Consumer{
+pub struct Member{
     #[serde(skip)]
     pub id: i64,
 
     pub user_id: Uuid,
-    pub consumer_id: Uuid,
+    pub member_id: Uuid,
     pub cellphone:String,
     pub real_name:Option<String>,
     pub gender:Option<String>,
@@ -191,10 +191,10 @@ fn custom_serialize<S: serde::Serializer>(value: &Cents, ser: S) -> Result<S::Ok
 }
 
 #[derive(Insertable)]
-#[diesel(table_name=consumers)]
-pub struct NewConsumer<'a>{
+#[diesel(table_name=members)]
+pub struct NewMember<'a>{
     pub user_id: &'a Uuid,
-    pub consumer_id: &'a Uuid,
+    pub member_id: &'a Uuid,
     pub cellphone:&'a str,
     pub real_name:Option<&'a str>,
     pub gender:Option<&'a str>,
@@ -207,11 +207,11 @@ pub struct NewConsumer<'a>{
 }
 
 #[derive(Queryable,Serialize)]
-pub struct Account{
+pub struct Barber{
     #[serde(skip)]
     pub id: i64,
     pub user_id: Uuid,
-    pub account_id: Uuid,
+    pub barber_id: Uuid,
     pub merchant_id: Uuid,
 
     pub cellphone:String,
@@ -230,10 +230,10 @@ pub struct Account{
 }
 
 #[derive(Insertable)]
-#[diesel(table_name=accounts)]
-pub struct NewAccount<'a>{
+#[diesel(table_name=barbers)]
+pub struct NewBarber<'a>{
     pub user_id: &'a Uuid,
-    pub account_id: &'a Uuid,
+    pub barber_id: &'a Uuid,
     pub merchant_id: &'a Uuid,
     pub cellphone:&'a str,
     pub email:Option<&'a str>,
@@ -283,7 +283,7 @@ pub struct NewMerchant<'a>{
 pub struct LoginInfo{
     pub id: i64,
     pub login_info_id: Uuid,
-    pub login_info_account: String,
+    pub login_info_barber: String,
     pub login_info_type: String,
     pub user_id: Uuid,
     pub enabled: bool,
@@ -295,7 +295,7 @@ pub struct LoginInfo{
 #[diesel(table_name=login_infos)]
 pub struct NewLoginInfo<'a>{
     pub login_info_id: &'a Uuid,
-    pub login_info_account: &'a str,
+    pub login_info_barber: &'a str,
     pub login_info_type: &'a str,
     pub user_id: &'a Uuid,
     pub enabled: bool,
