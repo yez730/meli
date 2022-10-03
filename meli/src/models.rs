@@ -1,9 +1,10 @@
 use async_trait::async_trait;
 use axum_session_authentication_middleware::{ user as auth_user,session::Authentication};
 use chrono::{Local, NaiveDate};
-use diesel::{prelude::*, data_types::Cents};
+use diesel::prelude::*;
 use serde::Serialize;
 use uuid::Uuid;
+use bigdecimal::BigDecimal;
 
 use crate::{schema::*, axum_pg_pool::AxumPgPool, my_date_format};
 
@@ -205,8 +206,8 @@ pub struct MerchantMember{
     pub merchant_id: Uuid,
     #[serde(skip)]
     pub member_id: Uuid,
-    #[serde(serialize_with = "custom_serialize")]
-    pub balance:Cents,
+
+    pub balance:BigDecimal,
     
     #[serde(skip)]
     pub enabled:bool,
@@ -220,16 +221,12 @@ pub struct MerchantMember{
     pub data: Option<String>,
 }
 
-fn custom_serialize<S: serde::Serializer>(value: &Cents, ser: S) -> Result<S::Ok, S::Error> {
-    ser.serialize_str(&format!("{:?}",value))
-}
-
 #[derive(Insertable)]
 #[diesel(table_name=merchant_members)]
 pub struct NewMerchantMember<'a>{
     pub merchant_id: &'a Uuid,
     pub member_id: &'a Uuid,
-    pub balance:&'a Cents,
+    pub balance:&'a BigDecimal,
     pub enabled:bool,
     pub create_time: chrono::DateTime<Local>,
     pub update_time: chrono::DateTime<Local>,
@@ -361,10 +358,8 @@ pub struct ServiceType{
     pub service_type_id: Uuid,
     pub merchant_id: Uuid,
     pub name: String,
-    #[serde(serialize_with = "custom_serialize")]
-    pub normal_prize:Cents,
-    #[serde(serialize_with = "custom_serialize")]
-    pub member_prize:Cents,
+    pub normal_prize:BigDecimal,
+    pub member_prize:BigDecimal,
 
     #[serde(skip)]
     pub enabled:bool,
@@ -383,8 +378,45 @@ pub struct NewServiceType<'a>{
     pub service_type_id: &'a Uuid,
     pub merchant_id: &'a Uuid,
     pub name:&'a str,
-    pub normal_prize:&'a Cents,
-    pub member_prize:&'a Cents,
+    pub normal_prize:&'a BigDecimal,
+    pub member_prize:&'a BigDecimal,
+    pub enabled:bool,
+    pub create_time: chrono::DateTime<Local>,
+    pub update_time: chrono::DateTime<Local>,
+    pub data: Option<&'a str>,
+}
+
+
+#[derive(Queryable,Serialize)]
+pub struct RechargeRecord{
+    #[serde(skip)]
+    pub id: i64,
+    pub recharge_record_id: Uuid,
+    pub merchant_id: Uuid,
+    pub member_id: Uuid,
+    pub amount:BigDecimal,
+    pub barber_id:Uuid,
+
+    #[serde(skip)]
+    pub enabled:bool,
+    #[serde(with = "my_date_format")]
+    pub create_time: chrono::DateTime<Local>,
+    #[serde(with = "my_date_format")]
+    pub update_time: chrono::DateTime<Local>,
+
+    #[serde(skip)]
+    pub data: Option<String>,
+}
+
+#[derive(Insertable)]
+#[diesel(table_name=recharge_records)]
+pub struct NewRechargeRecord<'a>{
+    pub recharge_record_id: &'a Uuid,
+    pub merchant_id: &'a Uuid,
+    pub member_id: &'a Uuid,
+    pub amount:&'a BigDecimal,
+
+    pub barber_id: &'a Uuid,
     pub enabled:bool,
     pub create_time: chrono::DateTime<Local>,
     pub update_time: chrono::DateTime<Local>,

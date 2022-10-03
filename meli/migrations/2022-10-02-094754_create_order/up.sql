@@ -13,7 +13,7 @@ CREATE TABLE orders (
     service_type_id UUID NOT NULL,
     status VARCHAR NOT NULL,
     payment_type VARCHAR NOT NULL,
-    amount MONEY NOT NULL,
+    amount NUMERIC NOT NULL,
     remark TEXT NULL,
     enabled BOOLEAN NOT NULL, 
     create_time TIMESTAMPTZ NOT NULL,

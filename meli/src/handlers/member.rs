@@ -1,15 +1,17 @@
 use axum::{http::StatusCode, Json, extract::{Query, Path, State}};
 use axum_session_authentication_middleware::session::AuthSession;
+use bigdecimal::{BigDecimal, Zero};
 use chrono::{Local, NaiveDate};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 use crate::{
     schema::*,
-    models::{Member, NewUser, NewMember, NewLoginInfo, NewPasswordLoginProvider, NewMerchantMember, MerchantMember}, authorization_policy
+    models::{Member, NewUser, NewMember, NewLoginInfo, NewPasswordLoginProvider, NewMerchantMember, MerchantMember, NewRechargeRecord}, authorization_policy
 };
 use diesel::{
     prelude::*, // for .filter
-    data_types::Cents, select, dsl::exists,
+    select, 
+    dsl::exists,
 }; 
 use crate::{models::User, axum_pg_pool::AxumPgPool};
 use super::{PaginatedListRequest,PaginatedListResponse};
@@ -116,7 +118,7 @@ pub async fn add_member(
         let new_balance=NewMerchantMember{
             merchant_id:&merchant_id,
             member_id: &member.member_id,
-            balance:&Cents(0),
+            balance:&BigDecimal::zero(),
 
             enabled:true,
             create_time: Local::now(),
@@ -210,7 +212,7 @@ pub async fn add_member(
         let new_balance=NewMerchantMember{
             merchant_id:&merchant_id,
             member_id: &new_member.member_id,
-            balance:&Cents(0),
+            balance:&BigDecimal::zero(),
 
             enabled:true,
             create_time: Local::now(),
@@ -328,4 +330,75 @@ pub async fn get_member(
         .map_err(|e|(StatusCode::INTERNAL_SERVER_ERROR,e.to_string()))?;
         
     Ok(Json(member))
+}
+
+#[derive(Deserialize)]
+pub struct RechargeRequest{
+    amount:BigDecimal,
+    barber_id:Uuid,
+}
+
+pub async fn recharge(
+    State(pool):State<AxumPgPool>,
+    auth: AuthSession<AxumPgPool, AxumPgPool,User>,
+    Path((merchant_id,member_id)):Path<(Uuid,Uuid)>, 
+    Json(req): Json<RechargeRequest>
+)->Result<(),(StatusCode,String)>{
+    //检查登录
+    let _=auth.identity.as_ref().ok_or((StatusCode::UNAUTHORIZED,"no login".to_string()))?;
+
+    //检查权限
+    auth.require_permissions(vec![authorization_policy::BARBER])
+        .map_err(|_|(StatusCode::INTERNAL_SERVER_ERROR,"no permission".to_string()))?;
+    
+    let mut conn=pool.pool.get().unwrap();//TODO error
+    
+    let existed=members::dsl::members
+        .filter(members::dsl::enabled.eq(true))
+        .filter(members::dsl::member_id.eq(member_id))
+        .get_result::<Member>(&mut *conn)
+        .ok();
+
+    if existed.is_none(){
+        return Err((StatusCode::INTERNAL_SERVER_ERROR,"会员不存在".to_string()));
+    }
+
+    let num=diesel::update(
+        merchant_members::dsl::merchant_members
+        .filter(merchant_members::dsl::member_id.eq(member_id))
+        .filter(merchant_members::dsl::merchant_id.eq(merchant_id))
+        .filter(merchant_members::dsl::enabled.eq(true))
+    )
+    .set((
+            merchant_members::dsl::balance.eq(merchant_members::dsl::balance + &req.amount),
+            merchant_members::dsl::update_time.eq(Local::now())
+        ))
+    .execute(&mut *conn).map_err(|e|{
+        tracing::error!("{}",e.to_string());
+        (StatusCode::INTERNAL_SERVER_ERROR,e.to_string())
+    })?;
+
+    if num !=1 {
+        tracing::error!("update_member affected num: {}",num);
+    }
+
+    let new_recharge_record=NewRechargeRecord{
+        recharge_record_id:&Uuid::new_v4(),
+        merchant_id:&merchant_id,
+        member_id: &member_id,
+        amount:&req.amount,
+        barber_id:&req.barber_id,
+        enabled:true,
+        create_time: Local::now(),
+        update_time: Local::now(),
+        data: None,
+    };
+    diesel::insert_into(recharge_records::table)
+    .values(&new_recharge_record)
+    .execute(&mut *conn).map_err(|e|{
+        tracing::error!("{}",e.to_string());
+        (StatusCode::INTERNAL_SERVER_ERROR,e.to_string())
+    })?;
+    
+    Ok(())
 }

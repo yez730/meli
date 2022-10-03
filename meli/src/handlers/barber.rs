@@ -9,7 +9,8 @@ use crate::{
 };
 use diesel::{
     prelude::*, // for .filter
-    data_types::Cents, select, dsl::exists,
+    select, 
+    dsl::exists,
 }; 
 use crate::{models::User, axum_pg_pool::AxumPgPool};
 use super::{PaginatedListRequest,PaginatedListResponse};
@@ -171,7 +172,7 @@ pub async fn add_barber(
 
 pub async fn delete_barber(
     State(pool):State<AxumPgPool>,
-    Path((_merchant_id,barber_id)):Path<(Uuid,Uuid)>, 
+    Path(barber_id):Path<Uuid>, 
     auth: AuthSession<AxumPgPool, AxumPgPool,User>,
 )->Result<(),(StatusCode,String)>{
     //检查登录
@@ -206,7 +207,7 @@ pub async fn delete_barber(
 
 pub async fn update_barber(
     State(pool):State<AxumPgPool>,
-    Path((_merchant_id,barber_id)):Path<(Uuid,Uuid)>, 
+    Path(barber_id):Path<Uuid>, 
     auth: AuthSession<AxumPgPool, AxumPgPool,User>,
     Json(req): Json<BarberRequest>
 )->Result<(),(StatusCode,String)>{
@@ -244,7 +245,7 @@ pub async fn update_barber(
 
 pub async fn get_barber(
     State(pool):State<AxumPgPool>,
-    Path((_merchant_id,barber_id)):Path<(Uuid,Uuid)>, 
+    Path(barber_id):Path<Uuid>, 
     auth: AuthSession<AxumPgPool, AxumPgPool,User>,
 )->Result<Json<Barber>,(StatusCode,String)>{
     //检查登录

@@ -2,14 +2,16 @@ use axum::{http::StatusCode, Json, extract::{Query, Path, State}};
 use axum_session_authentication_middleware::session::AuthSession;
 use chrono::{Local, NaiveDate};
 use serde::{Deserialize, Serialize};
+use bigdecimal::BigDecimal;
 use uuid::Uuid;
 use crate::{
     schema::*,
-    models::{ServiceType, NewUser, NewServiceType, NewLoginInfo, NewPasswordLoginProvider}, authorization_policy
+    models::{ServiceType, NewServiceType}, authorization_policy
 };
 use diesel::{
     prelude::*, // for .filter
-    data_types::Cents, select, dsl::exists,
+    select, 
+    dsl::exists,
 }; 
 use crate::{models::User, axum_pg_pool::AxumPgPool};
 use super::{PaginatedListRequest,PaginatedListResponse};
@@ -17,8 +19,8 @@ use super::{PaginatedListRequest,PaginatedListResponse};
 #[derive(Deserialize)]
 pub struct ServiceTypeRequest{
     pub name:String,
-    pub normal_prize:i64,
-    pub member_prize:i64,
+    pub normal_prize:BigDecimal,
+    pub member_prize:BigDecimal,
 }
 
 pub async fn get_service_types(
@@ -93,8 +95,8 @@ pub async fn add_service_type(
             service_type_id: &Uuid::new_v4(),
             merchant_id:&merchant_id,
             name:&req.name,
-            normal_prize:&Cents(req.normal_prize),
-            member_prize:&Cents(req.member_prize),
+            normal_prize:&req.normal_prize,
+            member_prize:&req.member_prize,
             enabled:true,
             create_time: Local::now(),
             update_time: Local::now(),
@@ -170,8 +172,8 @@ pub async fn update_service_type(
     )
     .set((
             service_types::dsl::name.eq(req.name),
-            service_types::dsl::normal_prize.eq(Cents(req.normal_prize)),
-            service_types::dsl::member_prize.eq(Cents(req.member_prize)),
+            service_types::dsl::normal_prize.eq(req.normal_prize),
+            service_types::dsl::member_prize.eq(req.member_prize),
             service_types::dsl::update_time.eq(Local::now())
         ))
     .execute(&mut *conn).map_err(|e|{

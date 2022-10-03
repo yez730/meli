@@ -118,6 +118,7 @@ pub fn create_or_update_super_user_barber(conn:&mut PgConnection){
     .values(&new_password_login_provider)
     .execute(conn)
     .unwrap();
+
 }
 
 pub mod my_option_date_format {

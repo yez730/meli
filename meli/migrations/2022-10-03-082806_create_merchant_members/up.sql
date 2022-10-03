@@ -4,7 +4,7 @@ CREATE TABLE merchant_members (
     id BIGSERIAL PRIMARY KEY,
     merchant_id UUID NOT NULL,
     member_id UUID NOT NULL,
-    balance MONEY NOT NULL,
+    balance NUMERIC NOT NULL,
     enabled BOOLEAN NOT NULL, 
     create_time TIMESTAMPTZ NOT NULL,
     update_time TIMESTAMPTZ NOT NULL,

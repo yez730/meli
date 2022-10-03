@@ -233,6 +233,7 @@ dependencies = [
  "num-bigint",
  "num-integer",
  "num-traits",
+ "serde",
 ]
 
 [[package]]
@@ -851,6 +852,7 @@ dependencies = [
  "axum",
  "axum_session_authentication_middleware",
  "axum_session_middleware",
+ "bigdecimal",
  "chrono",
  "cookie",
  "diesel",

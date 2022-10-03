@@ -5,7 +5,7 @@ CREATE TABLE recharge_records (
     recharge_record_id UUID NOT NULL,
     merchant_id UUID NOT NULL,
     member_id UUID NOT NULL,
-    amount MONEY NOT NULL,
+    amount NUMERIC NOT NULL,
     barber_id UUID NOT NULL, -- 操作者
     enabled BOOLEAN NOT NULL, 
     create_time TIMESTAMPTZ NOT NULL,
