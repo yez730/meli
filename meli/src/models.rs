@@ -353,3 +353,40 @@ pub struct NewPasswordLoginProvider<'a>{
     pub update_time: chrono::DateTime<Local>,
     pub data:Option<&'a str>
 }
+
+#[derive(Queryable,Serialize)]
+pub struct ServiceType{
+    #[serde(skip)]
+    pub id: i64,
+    pub service_type_id: Uuid,
+    pub merchant_id: Uuid,
+    pub name: String,
+    #[serde(serialize_with = "custom_serialize")]
+    pub normal_prize:Cents,
+    #[serde(serialize_with = "custom_serialize")]
+    pub member_prize:Cents,
+
+    #[serde(skip)]
+    pub enabled:bool,
+    #[serde(with = "my_date_format")]
+    pub create_time: chrono::DateTime<Local>,
+    #[serde(with = "my_date_format")]
+    pub update_time: chrono::DateTime<Local>,
+
+    #[serde(skip)]
+    pub data: Option<String>,
+}
+
+#[derive(Insertable)]
+#[diesel(table_name=service_types)]
+pub struct NewServiceType<'a>{
+    pub service_type_id: &'a Uuid,
+    pub merchant_id: &'a Uuid,
+    pub name:&'a str,
+    pub normal_prize:&'a Cents,
+    pub member_prize:&'a Cents,
+    pub enabled:bool,
+    pub create_time: chrono::DateTime<Local>,
+    pub update_time: chrono::DateTime<Local>,
+    pub data: Option<&'a str>,
+}
