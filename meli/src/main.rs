@@ -3,11 +3,14 @@ use std::{net::SocketAddr, str::FromStr};
 use axum::{Router, routing::{get, post}, http::{HeaderValue, header, Method}};
 use axum_session_authentication_middleware::layer::AuthSessionLayer;
 use axum_session_middleware::{layer::AxumSessionLayer, session_store::AxumSessionStore, config::AxumSessionConfig};
-use tower_http::{trace::TraceLayer, cors::Any};
+use barber::{get_barbers, add_barber, get_barber, update_barber, delete_barber};
+use identity::{login_by_username, logout, get_current_identity};
+use member::{get_members, add_member, get_member, update_member, delete_member};
+use tower_http::{trace::TraceLayer};
 use tower_http::cors::CorsLayer;
 use tracing_subscriber::{layer::SubscriberExt,util::SubscriberInitExt};
 
-use meli_backend::{ axum_pg_pool::AxumPgPool, models::User, utils::get_connection_pool, handlers::{user_handler::*}};
+use meli_backend::{ axum_pg_pool::AxumPgPool, models::User, utils::get_connection_pool, handlers::*};
 
 #[tokio::main]
 async fn main(){
@@ -26,8 +29,10 @@ async fn main(){
         .route("/login", post(login_by_username))
         .route("/logout", get(logout))
         .route("/identity", get(get_current_identity))
-        .route("/members", get(get_members).post(add_member))
-        .route("/member/:c_id", get(get_member).post(update_member).delete(delete_member))
+        .route("/members/:merchant_id", get(get_members).post(add_member))
+        .route("/member/:merchant_id/:member_id", get(get_member).post(update_member).delete(delete_member))
+        .route("/barbers/:merchant_id", get(get_barbers).post(add_barber))
+        .route("/barber/:merchant_id/:barber_id", get(get_barber).post(update_barber).delete(delete_barber))
         .layer(CorsLayer::new()
             .allow_origin("http://127.0.0.1:8080".parse::<HeaderValue>().unwrap(),)
             .allow_headers([

@@ -1,4 +1,8 @@
-pub mod user_handler;
+pub mod identity;
+pub mod barber;
+pub mod member;
+pub mod order;
+pub mod service_type;
 
 use serde::{Serialize, Deserialize};
 

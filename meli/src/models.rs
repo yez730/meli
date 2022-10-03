@@ -171,9 +171,43 @@ pub struct Member{
     pub gender:Option<String>,
     pub birth_day:Option<NaiveDate>,
 
+    #[serde(skip)]
+    pub enabled:bool,
+    
+    #[serde(with = "my_date_format")]
+    pub create_time: chrono::DateTime<Local>,
+    #[serde(with = "my_date_format")]
+    pub update_time: chrono::DateTime<Local>,
+
+    #[serde(skip)]
+    pub data: Option<String>,
+}
+
+#[derive(Insertable)]
+#[diesel(table_name=members)]
+pub struct NewMember<'a>{
+    pub user_id: &'a Uuid,
+    pub member_id: &'a Uuid,
+    pub cellphone:&'a str,
+    pub real_name:Option<&'a str>,
+    pub gender:Option<&'a str>,
+    pub birth_day:Option<NaiveDate>,
+    pub enabled:bool,
+    pub create_time: chrono::DateTime<Local>,
+    pub update_time: chrono::DateTime<Local>,
+    pub data: Option<&'a str>,
+}
+
+#[derive(Queryable,Serialize)]
+pub struct MerchantMember{
+    #[serde(skip)]
+    pub id: i64,
+    pub merchant_id: Uuid,
+    #[serde(skip)]
+    pub member_id: Uuid,
     #[serde(serialize_with = "custom_serialize")]
     pub balance:Cents,
-
+    
     #[serde(skip)]
     pub enabled:bool,
     
@@ -191,15 +225,11 @@ fn custom_serialize<S: serde::Serializer>(value: &Cents, ser: S) -> Result<S::Ok
 }
 
 #[derive(Insertable)]
-#[diesel(table_name=members)]
-pub struct NewMember<'a>{
-    pub user_id: &'a Uuid,
+#[diesel(table_name=merchant_members)]
+pub struct NewMerchantMember<'a>{
+    pub merchant_id: &'a Uuid,
     pub member_id: &'a Uuid,
-    pub cellphone:&'a str,
-    pub real_name:Option<&'a str>,
-    pub gender:Option<&'a str>,
-    pub birth_day:Option<NaiveDate>,
-    pub balance:Cents,
+    pub balance:&'a Cents,
     pub enabled:bool,
     pub create_time: chrono::DateTime<Local>,
     pub update_time: chrono::DateTime<Local>,
@@ -277,7 +307,6 @@ pub struct NewMerchant<'a>{
     pub update_time: chrono::DateTime<Local>,
     pub data: Option<&'a str>,
 }
-
 
 #[derive(Queryable,Clone)]
 pub struct LoginInfo{

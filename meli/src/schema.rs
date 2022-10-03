@@ -38,6 +38,18 @@ diesel::table! {
         real_name -> Nullable<Varchar>,
         gender -> Nullable<Varchar>,
         birth_day -> Nullable<Date>,
+        enabled -> Bool,
+        create_time -> Timestamptz,
+        update_time -> Timestamptz,
+        data -> Nullable<Text>,
+    }
+}
+
+diesel::table! {
+    merchant_members (id) {
+        id -> Int8,
+        merchant_id -> Uuid,
+        member_id -> Uuid,
         balance -> Money,
         enabled -> Bool,
         create_time -> Timestamptz,
@@ -75,6 +87,7 @@ diesel::table! {
         status -> Varchar,
         payment_type -> Varchar,
         amount -> Money,
+        remark -> Nullable<Text>,
         enabled -> Bool,
         create_time -> Timestamptz,
         update_time -> Timestamptz,
@@ -112,8 +125,10 @@ diesel::table! {
     recharge_records (id) {
         id -> Int8,
         recharge_record_id -> Uuid,
+        merchant_id -> Uuid,
         member_id -> Uuid,
         amount -> Money,
+        barber_id -> Uuid,
         enabled -> Bool,
         create_time -> Timestamptz,
         update_time -> Timestamptz,
@@ -129,6 +144,21 @@ diesel::table! {
         role_name -> Varchar,
         permissions -> Text,
         description -> Text,
+        enabled -> Bool,
+        create_time -> Timestamptz,
+        update_time -> Timestamptz,
+        data -> Nullable<Text>,
+    }
+}
+
+diesel::table! {
+    service_types (id) {
+        id -> Int8,
+        service_type_id -> Uuid,
+        merchant_id -> Uuid,
+        name -> Varchar,
+        normal_prize -> Money,
+        member_prize -> Money,
         enabled -> Bool,
         create_time -> Timestamptz,
         update_time -> Timestamptz,
@@ -167,12 +197,14 @@ diesel::allow_tables_to_appear_in_same_query!(
     barbers,
     login_infos,
     members,
+    merchant_members,
     merchants,
     orders,
     password_login_providers,
     permissions,
     recharge_records,
     roles,
+    service_types,
     sessions,
     users,
 );

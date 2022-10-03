@@ -8,7 +8,6 @@ CREATE TABLE members (
     real_name VARCHAR NULL,
     gender VARCHAR NULL,
     birth_day DATE NULL,
-    balance MONEY NOT NULL,
     enabled BOOLEAN NOT NULL,
     create_time TIMESTAMPTZ NOT NULL,
     update_time TIMESTAMPTZ NOT NULL,
