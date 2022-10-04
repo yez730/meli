@@ -157,6 +157,7 @@ diesel::table! {
         service_type_id -> Uuid,
         merchant_id -> Uuid,
         name -> Varchar,
+        estimated_duration -> Int4,
         normal_prize -> Numeric,
         member_prize -> Numeric,
         enabled -> Bool,

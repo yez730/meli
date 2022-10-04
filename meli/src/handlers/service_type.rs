@@ -1,6 +1,6 @@
 use axum::{http::StatusCode, Json, extract::{Query, Path, State}};
 use axum_session_authentication_middleware::session::AuthSession;
-use chrono::{Local, NaiveDate};
+use chrono::Local;
 use serde::{Deserialize, Serialize};
 use bigdecimal::BigDecimal;
 use uuid::Uuid;
@@ -21,6 +21,7 @@ pub struct ServiceTypeRequest{
     pub name:String,
     pub normal_prize:BigDecimal,
     pub member_prize:BigDecimal,
+    pub estimated_duration: i32,
 }
 
 pub async fn get_service_types(
@@ -97,6 +98,7 @@ pub async fn add_service_type(
             name:&req.name,
             normal_prize:&req.normal_prize,
             member_prize:&req.member_prize,
+            estimated_duration:req.estimated_duration,
             enabled:true,
             create_time: Local::now(),
             update_time: Local::now(),
@@ -174,6 +176,7 @@ pub async fn update_service_type(
             service_types::dsl::name.eq(req.name),
             service_types::dsl::normal_prize.eq(req.normal_prize),
             service_types::dsl::member_prize.eq(req.member_prize),
+            service_types::dsl::estimated_duration.eq(req.estimated_duration),
             service_types::dsl::update_time.eq(Local::now())
         ))
     .execute(&mut *conn).map_err(|e|{

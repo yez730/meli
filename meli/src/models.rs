@@ -358,9 +358,9 @@ pub struct ServiceType{
     pub service_type_id: Uuid,
     pub merchant_id: Uuid,
     pub name: String,
+    pub estimated_duration: i32,
     pub normal_prize:BigDecimal,
     pub member_prize:BigDecimal,
-
     #[serde(skip)]
     pub enabled:bool,
     #[serde(with = "my_date_format")]
@@ -378,6 +378,7 @@ pub struct NewServiceType<'a>{
     pub service_type_id: &'a Uuid,
     pub merchant_id: &'a Uuid,
     pub name:&'a str,
+    pub estimated_duration: i32,
     pub normal_prize:&'a BigDecimal,
     pub member_prize:&'a BigDecimal,
     pub enabled:bool,
