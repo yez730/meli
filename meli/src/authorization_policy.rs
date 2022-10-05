@@ -4,9 +4,9 @@ pub const ALPHA_ADMINISTRATOR:&str="AlphaAdministrator";
 pub const MERCHANT_ADMINISTRATOR:&str="MerchantAdministrator";
 
 //商户普通权限
-pub const BARBER_BASE:&str="Barber";
+pub const BARBER_BASE:&str="Barber_Base";
 //顾客普通权限
-pub const MEMBER_BASE:&str="Member";
+pub const MEMBER_BASE:&str="Member_Base";
 
 pub const CANLENDAR:&str="Canlendar";
 pub const MEMBER:&str="Member";
