@@ -4,15 +4,15 @@ pub const ALPHA_ADMINISTRATOR:&str="AlphaAdministrator";
 pub const MERCHANT_ADMINISTRATOR:&str="MerchantAdministrator";
 
 //商户普通权限
-pub const BARBER:&str="Barber";
+pub const BARBER_BASE:&str="Barber";
 //顾客普通权限
+pub const MEMBER_BASE:&str="Member";
+
+pub const CANLENDAR:&str="Canlendar";
 pub const MEMBER:&str="Member";
+pub const SERVICE_TYPE:&str="ServiceType";
+pub const BARBER:&str="Barber";
+pub const STATISTIC:&str="Statistic";
 
-pub const SHOUYE:&str="Shouye";
-pub const QIANTAI_YINGYE:&str="QiantaiYingye";
-pub const KEHU_GUANLI:&str="KehuGuanli";
-pub const YEWU_TONGJI:&str="YewuTongji";
-pub const HOUTAI_GUANLI:&str="HoutaiGuanli";
-
-pub const DEFAULT_PERMISSIONS_OF_MERCHANT_BARBER: &'static [&'static str] = &["Shouye", "QiantaiYingye", "KehuGuanli","YewuTongji","HoutaiGuanli"];
+pub const DEFAULT_PERMISSIONS_OF_MERCHANT_BARBER: &'static [&'static str] = &["Canlendar", "Member", "ServiceType","Barber","Statistic"];
 pub const DEFAULT_PERMISSIONS_OF_MEMBER: &'static [&'static str] = &[];//TODO Yuyue GerenXiaofeiJilu

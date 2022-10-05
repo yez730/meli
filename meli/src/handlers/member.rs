@@ -42,7 +42,7 @@ pub async fn get_members(
     let _=auth.identity.as_ref().ok_or((StatusCode::UNAUTHORIZED,"no login".to_string()))?;
 
     //检查权限
-    auth.require_permissions(vec![authorization_policy::BARBER])
+    auth.require_permissions(vec![authorization_policy::BARBER_BASE])
         .map_err(|_|(StatusCode::INTERNAL_SERVER_ERROR,"no permission".to_string()))?;
     
     let mut conn=pool.pool.get().unwrap();//TODO error
@@ -87,7 +87,7 @@ pub async fn add_member(
     let _=auth.identity.as_ref().ok_or((StatusCode::UNAUTHORIZED,"no login".to_string()))?;
 
     //检查权限
-    auth.require_permissions(vec![authorization_policy::BARBER])
+    auth.require_permissions(vec![authorization_policy::BARBER_BASE])
         .map_err(|_|(StatusCode::INTERNAL_SERVER_ERROR,"no permission".to_string()))?;
     
     let mut conn=pool.pool.get().unwrap();//TODO error
@@ -239,7 +239,7 @@ pub async fn delete_member(
     let _=auth.identity.as_ref().ok_or((StatusCode::UNAUTHORIZED,"no login".to_string()))?;
 
     //检查权限
-    auth.require_permissions(vec![authorization_policy::BARBER])
+    auth.require_permissions(vec![authorization_policy::BARBER_BASE])
         .map_err(|_|(StatusCode::INTERNAL_SERVER_ERROR,"no permission".to_string()))?;
     
     let mut conn=pool.pool.get().unwrap();//TODO error
@@ -277,7 +277,7 @@ pub async fn update_member(
     let _=auth.identity.as_ref().ok_or((StatusCode::UNAUTHORIZED,"no login".to_string()))?;
 
     //检查权限
-    auth.require_permissions(vec![authorization_policy::BARBER])
+    auth.require_permissions(vec![authorization_policy::BARBER_BASE])
         .map_err(|_|(StatusCode::INTERNAL_SERVER_ERROR,"no permission".to_string()))?;
    
     let mut conn=pool.pool.get().unwrap();//TODO error
@@ -315,7 +315,7 @@ pub async fn get_member(
     let _=auth.identity.as_ref().ok_or((StatusCode::UNAUTHORIZED,"no login".to_string()))?;
 
     //检查权限
-    auth.require_permissions(vec![authorization_policy::BARBER])
+    auth.require_permissions(vec![authorization_policy::BARBER_BASE])
         .map_err(|_|(StatusCode::INTERNAL_SERVER_ERROR,"no permission".to_string()))?;
 
     let mut conn=pool.pool.get().unwrap();//TODO error  
@@ -348,7 +348,7 @@ pub async fn recharge(
     let _=auth.identity.as_ref().ok_or((StatusCode::UNAUTHORIZED,"no login".to_string()))?;
 
     //检查权限
-    auth.require_permissions(vec![authorization_policy::BARBER])
+    auth.require_permissions(vec![authorization_policy::BARBER_BASE])
         .map_err(|_|(StatusCode::INTERNAL_SERVER_ERROR,"no permission".to_string()))?;
     
     let mut conn=pool.pool.get().unwrap();//TODO error
