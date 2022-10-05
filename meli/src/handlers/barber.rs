@@ -87,7 +87,7 @@ pub async fn add_barber(
         .get_result::<bool>(&mut *conn)
         .ok();
 
-    if let Some(existed)=existed{
+    if let Some(true)=existed{
         return Err((StatusCode::INTERNAL_SERVER_ERROR,"已存在该用户".to_string()));
     } else {
         // 1. add user

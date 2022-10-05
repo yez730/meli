@@ -89,7 +89,7 @@ pub async fn add_service_type(
         .get_result::<bool>(&mut *conn)
         .ok();
 
-    if let Some(existed)=existed{
+    if let Some(true)=existed{
         return Err((StatusCode::INTERNAL_SERVER_ERROR,"已存在该服务名称".to_string()));
     } else {
         let new_service_type=NewServiceType{
