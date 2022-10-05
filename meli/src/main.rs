@@ -13,6 +13,7 @@ use barber::*;
 use identity::*;
 use member::*;
 use service_type::*;
+use appointment::*;
 
 #[tokio::main]
 async fn main(){
@@ -41,6 +42,9 @@ async fn main(){
 
         .route("/service_types/:merchant_id", get(get_service_types).post(add_service_type))
         .route("/service_type/:merchant_id/:service_type_id", get(get_service_type).post(update_service_type).delete(delete_service_type))
+        
+        .route("/appointments/:merchant_id",get(get_appointments).post(add_appointment))
+        .route("/appointment/:merchant_id/:appointment_id",get(get_appointment))
 
         .layer(CorsLayer::new()
             .allow_origin("http://127.0.0.1:8080".parse::<HeaderValue>().unwrap(),)

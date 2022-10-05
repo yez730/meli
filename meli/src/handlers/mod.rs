@@ -1,7 +1,7 @@
 pub mod identity;
 pub mod barber;
 pub mod member;
-pub mod order;
+pub mod appointment;
 pub mod service_type;
 
 use serde::{Serialize, Deserialize};

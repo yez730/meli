@@ -34,7 +34,7 @@ pub async fn get_service_types(
     let _=auth.identity.as_ref().ok_or((StatusCode::UNAUTHORIZED,"no login".to_string()))?;
 
     //检查权限
-    auth.require_permissions(vec![authorization_policy::MERCHANT_ADMINISTRATOR])
+    auth.require_permissions(vec![authorization_policy::BARBER])
         .map_err(|_|(StatusCode::INTERNAL_SERVER_ERROR,"no permission".to_string()))?;
     
     let mut conn=pool.pool.get().unwrap();//TODO error
@@ -77,7 +77,7 @@ pub async fn add_service_type(
     let _=auth.identity.as_ref().ok_or((StatusCode::UNAUTHORIZED,"no login".to_string()))?;
 
     //检查权限
-    auth.require_permissions(vec![authorization_policy::MERCHANT_ADMINISTRATOR])
+    auth.require_permissions(vec![authorization_policy::BARBER])
         .map_err(|_|(StatusCode::INTERNAL_SERVER_ERROR,"no permission".to_string()))?;
     
     let mut conn=pool.pool.get().unwrap();//TODO error
@@ -124,7 +124,7 @@ pub async fn delete_service_type(
     let _=auth.identity.as_ref().ok_or((StatusCode::UNAUTHORIZED,"no login".to_string()))?;
 
     //检查权限
-    auth.require_permissions(vec![authorization_policy::MERCHANT_ADMINISTRATOR])
+    auth.require_permissions(vec![authorization_policy::BARBER])
         .map_err(|_|(StatusCode::INTERNAL_SERVER_ERROR,"no permission".to_string()))?;
     
     let mut conn=pool.pool.get().unwrap();//TODO error
@@ -161,7 +161,7 @@ pub async fn update_service_type(
     let _=auth.identity.as_ref().ok_or((StatusCode::UNAUTHORIZED,"no login".to_string()))?;
 
     //检查权限
-    auth.require_permissions(vec![authorization_policy::MERCHANT_ADMINISTRATOR])
+    auth.require_permissions(vec![authorization_policy::BARBER])
         .map_err(|_|(StatusCode::INTERNAL_SERVER_ERROR,"no permission".to_string()))?;
    
     let mut conn=pool.pool.get().unwrap();//TODO error
@@ -200,7 +200,7 @@ pub async fn get_service_type(
     let _=auth.identity.as_ref().ok_or((StatusCode::UNAUTHORIZED,"no login".to_string()))?;
 
     //检查权限
-    auth.require_permissions(vec![authorization_policy::MERCHANT_ADMINISTRATOR])
+    auth.require_permissions(vec![authorization_policy::BARBER])
         .map_err(|_|(StatusCode::INTERNAL_SERVER_ERROR,"no permission".to_string()))?;
 
     let mut conn=pool.pool.get().unwrap();//TODO error  

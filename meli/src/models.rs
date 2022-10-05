@@ -1,6 +1,6 @@
 use async_trait::async_trait;
 use axum_session_authentication_middleware::{ user as auth_user,session::Authentication};
-use chrono::{Local, NaiveDate};
+use chrono::{Local, NaiveDate, NaiveTime};
 use diesel::prelude::*;
 use serde::Serialize;
 use uuid::Uuid;
@@ -418,6 +418,58 @@ pub struct NewRechargeRecord<'a>{
     pub amount:&'a BigDecimal,
 
     pub barber_id: &'a Uuid,
+    pub enabled:bool,
+    pub create_time: chrono::DateTime<Local>,
+    pub update_time: chrono::DateTime<Local>,
+    pub data: Option<&'a str>,
+}
+
+#[derive(Queryable,Serialize)]
+pub struct Order{
+    #[serde(skip)]
+    pub id: i64,
+    pub order_id: Uuid,
+    pub merchant_id: Uuid,
+    pub date:NaiveDate,
+    pub start_time:NaiveTime,
+    pub end_time:NaiveTime,
+    pub consumer_type:String,  // walk-in / member
+    pub member_id: Option<Uuid>,
+    pub barber_id:Uuid,
+    pub service_type_id:Uuid,
+    pub status:String,
+    pub payment_type:String, // member / cash
+    pub amount:BigDecimal,
+    pub remark:Option<String>,
+
+    #[serde(skip)]
+    pub enabled:bool,
+    #[serde(with = "my_date_format")]
+    pub create_time: chrono::DateTime<Local>,
+    #[serde(with = "my_date_format")]
+    pub update_time: chrono::DateTime<Local>,
+
+    #[serde(skip)]
+    pub data: Option<String>,
+}
+
+#[derive(Insertable)]
+#[diesel(table_name=orders)]
+pub struct NewOrder<'a>{
+    pub order_id: &'a Uuid,
+    pub merchant_id: &'a Uuid,
+    pub date:&'a NaiveDate,
+    pub start_time:&'a NaiveTime,
+    pub end_time:&'a NaiveTime,
+    pub consumer_type:&'a str,  // walk-in / member
+    pub member_id: Option<&'a Uuid>,
+    pub barber_id: &'a Uuid,
+    pub service_type_id:&'a Uuid,
+    pub status:&'a str,
+    pub payment_type:&'a str, // member / cash
+    pub amount:&'a BigDecimal,
+    pub remark:Option<&'a str>,
+
     pub enabled:bool,
     pub create_time: chrono::DateTime<Local>,
     pub update_time: chrono::DateTime<Local>,
