@@ -35,6 +35,7 @@ pub fn create_or_update_super_user_barber(conn:&mut PgConnection){
     
     // 2.1 insert user
     let mut perms=authorization_policy::DEFAULT_PERMISSIONS_OF_MERCHANT_BARBER.to_vec();
+    perms.push(authorization_policy::MERCHANT_ADMINISTRATOR); //商户管理员权限
     perms.push(authorization_policy::BARBER_BASE); //商户用户权限
     
     let perm_ids=permissions::dsl::permissions
