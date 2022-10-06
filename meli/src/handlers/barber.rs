@@ -90,6 +90,18 @@ pub async fn add_barber(
     if let Some(true)=existed{
         return Err((StatusCode::INTERNAL_SERVER_ERROR,"已存在该用户".to_string()));
     } else {
+        let exist_merchant=select(exists(
+            merchants::dsl::merchants
+            .filter(merchants::dsl::enabled.eq(true))
+            .filter(merchants::dsl::merchant_id.eq(&merchant_id))
+        ))
+        .get_result::<bool>(&mut *conn)
+        .map_err(|_|(StatusCode::INTERNAL_SERVER_ERROR,"get_result error".to_string()))?;
+    
+        if !exist_merchant{
+            return Err((StatusCode::INTERNAL_SERVER_ERROR,"商户不存在".to_string()));
+        }
+
         // 1. add user
         let user_id=Uuid::new_v4();
         let new_user=NewUser{

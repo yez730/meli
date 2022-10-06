@@ -100,7 +100,7 @@ pub async fn add_member(
         .ok();
 
     if let Some(member)=existed{
-        let exists=select(exists(
+        let exist_member=select(exists(
             merchant_members::dsl::merchant_members
             .filter(merchant_members::dsl::enabled.eq(true))
             .filter(merchant_members::dsl::member_id.eq(member.member_id))
@@ -109,10 +109,9 @@ pub async fn add_member(
         .get_result(&mut *conn)
         .map_err(|_|(StatusCode::INTERNAL_SERVER_ERROR,"get_result error".to_string()))?;
 
-        if exists{
+        if exist_member{
             return Err((StatusCode::INTERNAL_SERVER_ERROR,"已存在该用户".to_string()));
         }
-
         // TODO update member info ?
 
         let new_balance=NewMerchantMember{
@@ -132,6 +131,18 @@ pub async fn add_member(
             (StatusCode::INTERNAL_SERVER_ERROR,e.to_string())
         })?;
     } else {
+        let exist_merchant=select(exists(
+            merchants::dsl::merchants
+            .filter(merchants::dsl::enabled.eq(true))
+            .filter(merchants::dsl::merchant_id.eq(&merchant_id))
+        ))
+        .get_result::<bool>(&mut *conn)
+        .map_err(|_|(StatusCode::INTERNAL_SERVER_ERROR,"get_result error".to_string()))?;
+    
+        if !exist_merchant{
+            return Err((StatusCode::INTERNAL_SERVER_ERROR,"商户不存在".to_string()));
+        }
+
         // 1. add user
         let user_id=Uuid::new_v4();
         let new_user=NewUser{
@@ -361,6 +372,18 @@ pub async fn recharge(
 
     if existed.is_none(){
         return Err((StatusCode::INTERNAL_SERVER_ERROR,"会员不存在".to_string()));
+    }
+
+    let exist_merchant=select(exists(
+        merchants::dsl::merchants
+        .filter(merchants::dsl::enabled.eq(true))
+        .filter(merchants::dsl::merchant_id.eq(&merchant_id))
+    ))
+    .get_result::<bool>(&mut *conn)
+    .map_err(|_|(StatusCode::INTERNAL_SERVER_ERROR,"get_result error".to_string()))?;
+
+    if !exist_merchant{
+        return Err((StatusCode::INTERNAL_SERVER_ERROR,"商户不存在".to_string()));
     }
 
     let num=diesel::update(

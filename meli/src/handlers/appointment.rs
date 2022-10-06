@@ -77,6 +77,18 @@ pub async fn add_appointment(
     
     let mut conn=pool.pool.get().unwrap();//TODO error
 
+    let exist_merchant=select(exists(
+        merchants::dsl::merchants
+        .filter(merchants::dsl::enabled.eq(true))
+        .filter(merchants::dsl::merchant_id.eq(&merchant_id))
+    ))
+    .get_result::<bool>(&mut *conn)
+    .map_err(|_|(StatusCode::INTERNAL_SERVER_ERROR,"get_result error".to_string()))?;
+
+    if !exist_merchant{
+        return Err((StatusCode::INTERNAL_SERVER_ERROR,"商户不存在".to_string()));
+    }
+
     let new_appointment=NewOrder{
         order_id: &Uuid::new_v4(),
         date: &req.date,

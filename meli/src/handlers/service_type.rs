@@ -92,6 +92,18 @@ pub async fn add_service_type(
     if let Some(true)=existed{
         return Err((StatusCode::INTERNAL_SERVER_ERROR,"已存在该服务名称".to_string()));
     } else {
+        let exist_merchant=select(exists(
+            merchants::dsl::merchants
+            .filter(merchants::dsl::enabled.eq(true))
+            .filter(merchants::dsl::merchant_id.eq(&merchant_id))
+        ))
+        .get_result::<bool>(&mut *conn)
+        .map_err(|_|(StatusCode::INTERNAL_SERVER_ERROR,"get_result error".to_string()))?;
+    
+        if !exist_merchant{
+            return Err((StatusCode::INTERNAL_SERVER_ERROR,"商户不存在".to_string()));
+        }
+        
         let new_service_type=NewServiceType{
             service_type_id: &Uuid::new_v4(),
             merchant_id:&merchant_id,
