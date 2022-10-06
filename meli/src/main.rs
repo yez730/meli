@@ -33,18 +33,18 @@ async fn main(){
         .route("/logout", get(logout))
         .route("/identity", get(get_current_identity))
         
-        .route("/members/:merchant_id", get(get_members).post(add_member))
-        .route("/member/:merchant_id/:member_id", get(get_member).post(update_member).delete(delete_member))
-        .route("/member/recharge/:merchant_id/:member_id", post(recharge))
+        .route("/members", get(get_members).post(add_member))
+        .route("/member/:member_id", get(get_member).post(update_member).delete(delete_member))
+        .route("/member/recharge/:member_id", post(recharge))
         
-        .route("/barbers/:merchant_id", get(get_barbers).post(add_barber))
+        .route("/barbers", get(get_barbers).post(add_barber))
         .route("/barber/:barber_id", get(get_barber).post(update_barber).delete(delete_barber))
 
-        .route("/service_types/:merchant_id", get(get_service_types).post(add_service_type))
-        .route("/service_type/:merchant_id/:service_type_id", get(get_service_type).post(update_service_type).delete(delete_service_type))
+        .route("/service_types", get(get_service_types).post(add_service_type))
+        .route("/service_type/:service_type_id", get(get_service_type).post(update_service_type).delete(delete_service_type))
         
-        .route("/appointments/:merchant_id",get(get_appointments).post(add_appointment))
-        .route("/appointment/:merchant_id/:appointment_id",get(get_appointment))
+        .route("/appointments",get(get_appointments).post(add_appointment))
+        .route("/appointment/:appointment_id",get(get_appointment))
 
         .layer(CorsLayer::new()
             .allow_origin("http://127.0.0.1:8080".parse::<HeaderValue>().unwrap(),)

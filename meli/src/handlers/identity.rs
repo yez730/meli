@@ -43,16 +43,18 @@ pub async fn login_by_username(State(pool):State<AxumPgPool>,mut auth: AuthSessi
             .filter(users::dsl::enabled.eq(true))
             .get_result::<User>(&mut *conn).map_err(|e|(StatusCode::INTERNAL_SERVER_ERROR,e.to_string()))?;
 
-    let barber=barbers::table
+    let barber_merchant=barbers::table
         .inner_join(merchants::table.on(barbers::merchant_id.eq(merchants::merchant_id)))
         .filter(barbers::dsl::user_id.eq(user.user_id))
         .filter(barbers::dsl::enabled.eq(true))
         .get_result::<(Barber,Merchant)>(&mut *conn)
-        .ok() //TODO track error
-        .map(|a_m| BarberResonse{
-            barber:a_m.0,
-            merchant:a_m.1,
-        });
+        .ok();
+
+    let barber_response=barber_merchant.clone().map(|bm| BarberResonse{
+        barber:bm.0,
+        merchant:bm.1,
+    });
+
     let member=members::dsl::members
         .filter(members::dsl::user_id.eq(user.user_id))
         .filter(members::dsl::enabled.eq(true))
@@ -61,10 +63,11 @@ pub async fn login_by_username(State(pool):State<AxumPgPool>,mut auth: AuthSessi
     
     let response=LoginResponse{
         identity:User::load_identity(login_info.user_id,pool.clone()),
-        barber,
+        barber:barber_response,
         member,
     };
     auth.sign_in(login_info.user_id).await;
+    auth.axum_session.lock().unwrap().set_data(String::from("barber"), serde_json::to_string(&barber_merchant.map(|bm|bm.0)).unwrap());
     
     Ok(Json(response))
 }

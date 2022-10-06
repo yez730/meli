@@ -1,12 +1,12 @@
 use axum::{http::StatusCode, Json, extract::{Query, Path, State}};
 use axum_session_authentication_middleware::session::AuthSession;
 use chrono::Local;
-use serde::{Deserialize, Serialize};
+use serde::Deserialize;
 use bigdecimal::BigDecimal;
 use uuid::Uuid;
 use crate::{
     schema::*,
-    models::{ServiceType, NewServiceType}, authorization_policy
+    models::{ServiceType, NewServiceType, Barber}, authorization_policy
 };
 use diesel::{
     prelude::*, // for .filter
@@ -26,7 +26,6 @@ pub struct ServiceTypeRequest{
 
 pub async fn get_service_types(
     State(pool):State<AxumPgPool>,
-    Path(merchant_id):Path<Uuid>, 
     Query(params):Query<PaginatedListRequest>, 
     auth: AuthSession<AxumPgPool, AxumPgPool,User>,
 )->Result<Json<PaginatedListResponse<ServiceType>>,(StatusCode,String)>{
@@ -39,10 +38,13 @@ pub async fn get_service_types(
     
     let mut conn=pool.pool.get().unwrap();//TODO error
 
+    let barber=serde_json::from_str::<Option<Barber>>(auth.axum_session.lock().unwrap().get_data("barber"))
+	    .unwrap().unwrap();
+
     let get_service_types_query=|p:&PaginatedListRequest|{
         let mut query=service_types::dsl::service_types
             .filter(service_types::dsl::enabled.eq(true))
-            .filter(service_types::dsl::merchant_id.eq(merchant_id))
+            .filter(service_types::dsl::merchant_id.eq(barber.merchant_id))
             .into_boxed();
         if let Some(key)=p.key.as_ref(){
             query=query
@@ -70,7 +72,6 @@ pub async fn get_service_types(
 pub async fn add_service_type(
     State(pool):State<AxumPgPool>,
     auth: AuthSession<AxumPgPool, AxumPgPool,User>,
-    Path(merchant_id):Path<Uuid>, 
     Json(req): Json<ServiceTypeRequest>
 )->Result<(),(StatusCode,String)>{
     //检查登录
@@ -82,31 +83,22 @@ pub async fn add_service_type(
     
     let mut conn=pool.pool.get().unwrap();//TODO error
     
+    let barber=serde_json::from_str::<Option<Barber>>(auth.axum_session.lock().unwrap().get_data("barber"))
+	    .unwrap().unwrap();
+
     let existed=select(exists(service_types::dsl::service_types
         .filter(service_types::dsl::enabled.eq(true))
         .filter(service_types::dsl::name.eq(&req.name))
-        .filter(service_types::dsl::merchant_id.eq(merchant_id))))
+        .filter(service_types::dsl::merchant_id.eq(barber.merchant_id))))
         .get_result::<bool>(&mut *conn)
         .ok();
 
     if let Some(true)=existed{
         return Err((StatusCode::INTERNAL_SERVER_ERROR,"已存在该服务名称".to_string()));
     } else {
-        let exist_merchant=select(exists(
-            merchants::dsl::merchants
-            .filter(merchants::dsl::enabled.eq(true))
-            .filter(merchants::dsl::merchant_id.eq(&merchant_id))
-        ))
-        .get_result::<bool>(&mut *conn)
-        .map_err(|_|(StatusCode::INTERNAL_SERVER_ERROR,"get_result error".to_string()))?;
-    
-        if !exist_merchant{
-            return Err((StatusCode::INTERNAL_SERVER_ERROR,"商户不存在".to_string()));
-        }
-        
         let new_service_type=NewServiceType{
             service_type_id: &Uuid::new_v4(),
-            merchant_id:&merchant_id,
+            merchant_id:&barber.merchant_id,
             name:&req.name,
             normal_prize:&req.normal_prize,
             member_prize:&req.member_prize,
@@ -129,7 +121,7 @@ pub async fn add_service_type(
 
 pub async fn delete_service_type(
     State(pool):State<AxumPgPool>,
-    Path((merchant_id,service_type_id)):Path<(Uuid,Uuid)>, 
+    Path(service_type_id):Path<Uuid>, 
     auth: AuthSession<AxumPgPool, AxumPgPool,User>,
 )->Result<(),(StatusCode,String)>{
     //检查登录
@@ -141,10 +133,13 @@ pub async fn delete_service_type(
     
     let mut conn=pool.pool.get().unwrap();//TODO error
 
+    let barber=serde_json::from_str::<Option<Barber>>(auth.axum_session.lock().unwrap().get_data("barber"))
+	    .unwrap().unwrap();
+
     let count=diesel::update(
         service_types::dsl::service_types
         .filter(service_types::dsl::service_type_id.eq(service_type_id))
-        .filter(service_types::dsl::merchant_id.eq(merchant_id))
+        .filter(service_types::dsl::merchant_id.eq(barber.merchant_id))
         .filter(service_types::dsl::enabled.eq(true))
     )
     .set((
@@ -165,7 +160,7 @@ pub async fn delete_service_type(
 
 pub async fn update_service_type(
     State(pool):State<AxumPgPool>,
-    Path((merchant_id,service_type_id)):Path<(Uuid,Uuid)>, 
+    Path(service_type_id):Path<Uuid>, 
     auth: AuthSession<AxumPgPool, AxumPgPool,User>,
     Json(req): Json<ServiceTypeRequest>
 )->Result<(),(StatusCode,String)>{
@@ -178,10 +173,13 @@ pub async fn update_service_type(
    
     let mut conn=pool.pool.get().unwrap();//TODO error
 
+    let barber=serde_json::from_str::<Option<Barber>>(auth.axum_session.lock().unwrap().get_data("barber"))
+	    .unwrap().unwrap();
+
     let num=diesel::update(
         service_types::dsl::service_types
         .filter(service_types::dsl::service_type_id.eq(service_type_id))
-        .filter(service_types::dsl::merchant_id.eq(merchant_id))
+        .filter(service_types::dsl::merchant_id.eq(barber.merchant_id))
         .filter(service_types::dsl::enabled.eq(true))
     )
     .set((
@@ -205,7 +203,7 @@ pub async fn update_service_type(
 
 pub async fn get_service_type(
     State(pool):State<AxumPgPool>,
-    Path((merchant_id,service_type_id)):Path<(Uuid,Uuid)>, 
+    Path(service_type_id):Path<Uuid>, 
     auth: AuthSession<AxumPgPool, AxumPgPool,User>,
 )->Result<Json<ServiceType>,(StatusCode,String)>{
     //检查登录
@@ -217,10 +215,13 @@ pub async fn get_service_type(
 
     let mut conn=pool.pool.get().unwrap();//TODO error  
     
+    let barber=serde_json::from_str::<Option<Barber>>(auth.axum_session.lock().unwrap().get_data("barber"))
+	    .unwrap().unwrap();
+
     let service_type=service_types::dsl::service_types
         .filter(service_types::dsl::enabled.eq(true))
         .filter(service_types::dsl::service_type_id.eq(service_type_id))
-        .filter(service_types::dsl::merchant_id.eq(merchant_id))
+        .filter(service_types::dsl::merchant_id.eq(barber.merchant_id))
         .get_result::<ServiceType>(&mut *conn)
         .map_err(|e|(StatusCode::INTERNAL_SERVER_ERROR,e.to_string()))?;
         

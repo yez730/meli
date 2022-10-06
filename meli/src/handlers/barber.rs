@@ -24,7 +24,6 @@ pub struct BarberRequest{
 
 pub async fn get_barbers(
     State(pool):State<AxumPgPool>,
-    Path(merchant_id):Path<Uuid>, 
     Query(params):Query<PaginatedListRequest>, 
     auth: AuthSession<AxumPgPool, AxumPgPool,User>,
 )->Result<Json<PaginatedListResponse<Barber>>,(StatusCode,String)>{
@@ -37,10 +36,13 @@ pub async fn get_barbers(
     
     let mut conn=pool.pool.get().unwrap();//TODO error
 
+    let barber=serde_json::from_str::<Option<Barber>>(auth.axum_session.lock().unwrap().get_data("barber"))
+	    .unwrap().unwrap();
+
     let get_barbers_query=|p:&PaginatedListRequest|{
         let mut query=barbers::dsl::barbers
             .filter(barbers::dsl::enabled.eq(true))
-            .filter(barbers::dsl::merchant_id.eq(merchant_id))
+            .filter(barbers::dsl::merchant_id.eq(barber.merchant_id))
             .into_boxed();
         if let Some(key)=p.key.as_ref(){
             query=query
@@ -68,7 +70,6 @@ pub async fn get_barbers(
 pub async fn add_barber(
     State(pool):State<AxumPgPool>,
     auth: AuthSession<AxumPgPool, AxumPgPool,User>,
-    Path(merchant_id):Path<Uuid>, 
     Json(req): Json<BarberRequest>
 )->Result<(),(StatusCode,String)>{
     //检查登录
@@ -80,6 +81,9 @@ pub async fn add_barber(
     
     let mut conn=pool.pool.get().unwrap();//TODO error
     
+    let barber=serde_json::from_str::<Option<Barber>>(auth.axum_session.lock().unwrap().get_data("barber"))
+	    .unwrap().unwrap();
+
     //添加 TODO insert data with enabled settting false, finally set to true.
     let existed=select(exists(barbers::dsl::barbers
         .filter(barbers::dsl::enabled.eq(true))
@@ -90,18 +94,6 @@ pub async fn add_barber(
     if let Some(true)=existed{
         return Err((StatusCode::INTERNAL_SERVER_ERROR,"已存在该用户".to_string()));
     } else {
-        let exist_merchant=select(exists(
-            merchants::dsl::merchants
-            .filter(merchants::dsl::enabled.eq(true))
-            .filter(merchants::dsl::merchant_id.eq(&merchant_id))
-        ))
-        .get_result::<bool>(&mut *conn)
-        .map_err(|_|(StatusCode::INTERNAL_SERVER_ERROR,"get_result error".to_string()))?;
-    
-        if !exist_merchant{
-            return Err((StatusCode::INTERNAL_SERVER_ERROR,"商户不存在".to_string()));
-        }
-
         // 1. add user
         let user_id=Uuid::new_v4();
         let new_user=NewUser{
@@ -162,7 +154,7 @@ pub async fn add_barber(
         let new_barber=NewBarber{
             user_id:  &user_id,
             barber_id: &Uuid::new_v4(),
-            merchant_id:&merchant_id,
+            merchant_id:&barber.merchant_id,
             email:req.email.as_deref(),
             cellphone:&req.cellphone,
             real_name:req.real_name.as_deref(),

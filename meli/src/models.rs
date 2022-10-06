@@ -2,7 +2,7 @@ use async_trait::async_trait;
 use axum_session_authentication_middleware::{ user as auth_user,session::Authentication};
 use chrono::{Local, NaiveDate, NaiveTime};
 use diesel::prelude::*;
-use serde::Serialize;
+use serde::{Serialize, Deserialize};
 use uuid::Uuid;
 use bigdecimal::BigDecimal;
 
@@ -233,7 +233,7 @@ pub struct NewMerchantMember<'a>{
     pub data: Option<&'a str>,
 }
 
-#[derive(Queryable,Serialize)]
+#[derive(Queryable,Serialize,Clone,Deserialize)]
 pub struct Barber{
     #[serde(skip)]
     pub id: i64,
@@ -271,7 +271,7 @@ pub struct NewBarber<'a>{
     pub data: Option<&'a str>,
 }
 
-#[derive(Queryable,Serialize)]
+#[derive(Queryable,Serialize,Clone)]
 pub struct Merchant{
     #[serde(skip)]
     pub id: i64,
@@ -435,20 +435,28 @@ pub struct Order{
     pub start_time: chrono::DateTime<Local>,
     #[serde(rename="end",with = "my_date_format")]
     pub end_time: chrono::DateTime<Local>,
+    #[serde(skip)]
     pub consumer_type:String,  // walk-in / member
+    #[serde(skip)]
     pub member_id: Option<Uuid>,
+    #[serde(skip)]
     pub barber_id:Uuid,
+    #[serde(skip)]
     pub service_type_id:Uuid,
+    #[serde(skip)]
     pub status:String,
+    #[serde(skip)]
     pub payment_type:String, // member / cash
+    #[serde(skip)]
     pub amount:BigDecimal,
+    #[serde(skip)]
     pub remark:Option<String>,
 
     #[serde(skip)]
     pub enabled:bool,
-    #[serde(with = "my_date_format")]
+    #[serde(skip)]
     pub create_time: chrono::DateTime<Local>,
-    #[serde(with = "my_date_format")]
+    #[serde(skip)]
     pub update_time: chrono::DateTime<Local>,
 
     #[serde(skip)]

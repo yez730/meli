@@ -6,7 +6,7 @@ use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 use crate::{
     schema::*,
-    models::{Member, NewUser, NewMember, NewLoginInfo, NewPasswordLoginProvider, NewMerchantMember, MerchantMember, NewRechargeRecord}, authorization_policy
+    models::{Member, NewUser, NewMember, NewLoginInfo, NewPasswordLoginProvider, NewMerchantMember, MerchantMember, NewRechargeRecord, Barber}, authorization_policy
 };
 use diesel::{
     prelude::*, // for .filter
@@ -34,7 +34,6 @@ pub struct MemberResponse{
 
 pub async fn get_members(
     State(pool):State<AxumPgPool>,
-    Path(merchant_id):Path<Uuid>, 
     Query(params):Query<PaginatedListRequest>, 
     auth: AuthSession<AxumPgPool, AxumPgPool,User>,
 )->Result<Json<PaginatedListResponse<MemberResponse>>,(StatusCode,String)>{
@@ -47,11 +46,14 @@ pub async fn get_members(
     
     let mut conn=pool.pool.get().unwrap();//TODO error
 
+    let barber=serde_json::from_str::<Option<Barber>>(auth.axum_session.lock().unwrap().get_data("barber"))
+	    .unwrap().unwrap();
+
     let get_members_query=|p:&PaginatedListRequest|{
         let mut query=members::dsl::members.inner_join(merchant_members::dsl::merchant_members.on(members::dsl::member_id.eq(merchant_members::dsl::member_id)))
             .filter(members::dsl::enabled.eq(true))
             .filter(merchant_members::dsl::enabled.eq(true))
-            .filter(merchant_members::dsl::merchant_id.eq(merchant_id))
+            .filter(merchant_members::dsl::merchant_id.eq(barber.merchant_id))
             .into_boxed();
         if let Some(key)=p.key.as_ref(){
             query=query
@@ -80,7 +82,6 @@ pub async fn get_members(
 pub async fn add_member(
     State(pool):State<AxumPgPool>,
     auth: AuthSession<AxumPgPool, AxumPgPool,User>,
-    Path(merchant_id):Path<Uuid>, 
     Json(req): Json<MemberRequest>
 )->Result<(),(StatusCode,String)>{
     //检查登录
@@ -92,6 +93,9 @@ pub async fn add_member(
     
     let mut conn=pool.pool.get().unwrap();//TODO error
     
+    let barber=serde_json::from_str::<Option<Barber>>(auth.axum_session.lock().unwrap().get_data("barber"))
+	    .unwrap().unwrap();
+
     //添加 TODO insert data with enabled settting false, finally set to true.
     let existed=members::dsl::members
         .filter(members::dsl::enabled.eq(true))
@@ -104,7 +108,7 @@ pub async fn add_member(
             merchant_members::dsl::merchant_members
             .filter(merchant_members::dsl::enabled.eq(true))
             .filter(merchant_members::dsl::member_id.eq(member.member_id))
-            .filter(merchant_members::dsl::merchant_id.eq(&merchant_id))
+            .filter(merchant_members::dsl::merchant_id.eq(&barber.merchant_id))
         ))
         .get_result(&mut *conn)
         .map_err(|_|(StatusCode::INTERNAL_SERVER_ERROR,"get_result error".to_string()))?;
@@ -115,7 +119,7 @@ pub async fn add_member(
         // TODO update member info ?
 
         let new_balance=NewMerchantMember{
-            merchant_id:&merchant_id,
+            merchant_id:&barber.merchant_id,
             member_id: &member.member_id,
             balance:&BigDecimal::zero(),
 
@@ -131,18 +135,6 @@ pub async fn add_member(
             (StatusCode::INTERNAL_SERVER_ERROR,e.to_string())
         })?;
     } else {
-        let exist_merchant=select(exists(
-            merchants::dsl::merchants
-            .filter(merchants::dsl::enabled.eq(true))
-            .filter(merchants::dsl::merchant_id.eq(&merchant_id))
-        ))
-        .get_result::<bool>(&mut *conn)
-        .map_err(|_|(StatusCode::INTERNAL_SERVER_ERROR,"get_result error".to_string()))?;
-    
-        if !exist_merchant{
-            return Err((StatusCode::INTERNAL_SERVER_ERROR,"商户不存在".to_string()));
-        }
-
         // 1. add user
         let user_id=Uuid::new_v4();
         let new_user=NewUser{
@@ -221,7 +213,7 @@ pub async fn add_member(
 
         // 4. add relationship & balance.
         let new_balance=NewMerchantMember{
-            merchant_id:&merchant_id,
+            merchant_id:&barber.merchant_id,
             member_id: &new_member.member_id,
             balance:&BigDecimal::zero(),
 
@@ -243,7 +235,7 @@ pub async fn add_member(
 
 pub async fn delete_member(
     State(pool):State<AxumPgPool>,
-    Path((merchant_id,member_id)):Path<(Uuid,Uuid)>, 
+    Path(member_id):Path<Uuid>, 
     auth: AuthSession<AxumPgPool, AxumPgPool,User>,
 )->Result<(),(StatusCode,String)>{
     //检查登录
@@ -255,10 +247,13 @@ pub async fn delete_member(
     
     let mut conn=pool.pool.get().unwrap();//TODO error
 
+    let barber=serde_json::from_str::<Option<Barber>>(auth.axum_session.lock().unwrap().get_data("barber"))
+	    .unwrap().unwrap();
+
     let count=diesel::update(
         merchant_members::dsl::merchant_members
         .filter(merchant_members::dsl::member_id.eq(member_id))
-        .filter(merchant_members::dsl::merchant_id.eq(merchant_id))
+        .filter(merchant_members::dsl::merchant_id.eq(barber.merchant_id))
         .filter(merchant_members::dsl::enabled.eq(true))
     )
     .set((
@@ -277,10 +272,10 @@ pub async fn delete_member(
     Ok(())
 }
 
-// TODO 不许与商家
+// TODO 不允许商家
 pub async fn update_member(
     State(pool):State<AxumPgPool>,
-    Path((_merchant_id,member_id)):Path<(Uuid,Uuid)>, 
+    Path(member_id):Path<Uuid>, 
     auth: AuthSession<AxumPgPool, AxumPgPool,User>,
     Json(req): Json<MemberRequest>
 )->Result<(),(StatusCode,String)>{
@@ -292,6 +287,9 @@ pub async fn update_member(
         .map_err(|_|(StatusCode::INTERNAL_SERVER_ERROR,"no permission".to_string()))?;
    
     let mut conn=pool.pool.get().unwrap();//TODO error
+
+    // let barber=serde_json::from_str::<Option<Barber>>(auth.axum_session.lock().unwrap().get_data("barber"))
+    // 	.unwrap().unwrap();
 
     let num=diesel::update(
         members::dsl::members
@@ -319,7 +317,7 @@ pub async fn update_member(
 
 pub async fn get_member(
     State(pool):State<AxumPgPool>,
-    Path((merchant_id,member_id)):Path<(Uuid,Uuid)>, 
+    Path(member_id):Path<Uuid>, 
     auth: AuthSession<AxumPgPool, AxumPgPool,User>,
 )->Result<Json<MemberResponse>,(StatusCode,String)>{
     //检查登录
@@ -331,11 +329,14 @@ pub async fn get_member(
 
     let mut conn=pool.pool.get().unwrap();//TODO error  
     
+    let barber=serde_json::from_str::<Option<Barber>>(auth.axum_session.lock().unwrap().get_data("barber"))
+	    .unwrap().unwrap();
+
     let member=members::dsl::members.inner_join(merchant_members::dsl::merchant_members.on(members::dsl::member_id.eq(merchant_members::dsl::member_id)))
         .filter(members::dsl::enabled.eq(true))
         .filter(merchant_members::dsl::enabled.eq(true))
         .filter(merchant_members::dsl::member_id.eq(member_id))
-        .filter(merchant_members::dsl::merchant_id.eq(merchant_id))
+        .filter(merchant_members::dsl::merchant_id.eq(barber.merchant_id))
         .get_result::<(Member, MerchantMember)>(&mut *conn)
         .map(|(m,b)|MemberResponse { member: m, balance: b })
         .map_err(|e|(StatusCode::INTERNAL_SERVER_ERROR,e.to_string()))?;
@@ -346,13 +347,12 @@ pub async fn get_member(
 #[derive(Deserialize)]
 pub struct RechargeRequest{
     amount:BigDecimal,
-    barber_id:Uuid,
 }
 
 pub async fn recharge(
     State(pool):State<AxumPgPool>,
     auth: AuthSession<AxumPgPool, AxumPgPool,User>,
-    Path((merchant_id,member_id)):Path<(Uuid,Uuid)>, 
+    Path(member_id):Path<Uuid>, 
     Json(req): Json<RechargeRequest>
 )->Result<(),(StatusCode,String)>{
     //检查登录
@@ -364,6 +364,9 @@ pub async fn recharge(
     
     let mut conn=pool.pool.get().unwrap();//TODO error
     
+    let barber=serde_json::from_str::<Option<Barber>>(auth.axum_session.lock().unwrap().get_data("barber"))
+	    .unwrap().unwrap();
+
     let existed=members::dsl::members
         .filter(members::dsl::enabled.eq(true))
         .filter(members::dsl::member_id.eq(member_id))
@@ -374,22 +377,10 @@ pub async fn recharge(
         return Err((StatusCode::INTERNAL_SERVER_ERROR,"会员不存在".to_string()));
     }
 
-    let exist_merchant=select(exists(
-        merchants::dsl::merchants
-        .filter(merchants::dsl::enabled.eq(true))
-        .filter(merchants::dsl::merchant_id.eq(&merchant_id))
-    ))
-    .get_result::<bool>(&mut *conn)
-    .map_err(|_|(StatusCode::INTERNAL_SERVER_ERROR,"get_result error".to_string()))?;
-
-    if !exist_merchant{
-        return Err((StatusCode::INTERNAL_SERVER_ERROR,"商户不存在".to_string()));
-    }
-
     let num=diesel::update(
         merchant_members::dsl::merchant_members
         .filter(merchant_members::dsl::member_id.eq(member_id))
-        .filter(merchant_members::dsl::merchant_id.eq(merchant_id))
+        .filter(merchant_members::dsl::merchant_id.eq(barber.merchant_id))
         .filter(merchant_members::dsl::enabled.eq(true))
     )
     .set((
@@ -407,10 +398,10 @@ pub async fn recharge(
 
     let new_recharge_record=NewRechargeRecord{
         recharge_record_id:&Uuid::new_v4(),
-        merchant_id:&merchant_id,
+        merchant_id:&barber.merchant_id,
         member_id: &member_id,
         amount:&req.amount,
-        barber_id:&req.barber_id,
+        barber_id:&barber.barber_id,
         enabled:true,
         create_time: Local::now(),
         update_time: Local::now(),
