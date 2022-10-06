@@ -428,11 +428,12 @@ pub struct NewRechargeRecord<'a>{
 pub struct Order{
     #[serde(skip)]
     pub id: i64,
+    #[serde(rename = "id")]
     pub order_id: Uuid,
     pub merchant_id: Uuid,
-    #[serde(with = "my_date_format")]
+    #[serde(rename="start", with = "my_date_format")]
     pub start_time: chrono::DateTime<Local>,
-    #[serde(with = "my_date_format")]
+    #[serde(rename="end",with = "my_date_format")]
     pub end_time: chrono::DateTime<Local>,
     pub consumer_type:String,  // walk-in / member
     pub member_id: Option<Uuid>,

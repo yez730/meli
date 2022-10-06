@@ -2,11 +2,11 @@ use axum::{http::StatusCode, Json, extract::{Query, Path, State}};
 use axum_session_authentication_middleware::session::AuthSession;
 use bigdecimal::BigDecimal;
 use chrono::{Local, NaiveDate, NaiveTime, DateTime};
-use serde::{Deserialize};
+use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 use crate::{
     schema::*,
-    models::{Order, NewOrder}, authorization_policy
+    models::{Order, NewOrder, Member, Barber, ServiceType}, authorization_policy
 };
 use diesel::{
     prelude::*, // for .filter
@@ -34,12 +34,30 @@ pub struct CalendarRequest{
     pub end_date:DateTime<Local>,
 }
 
+#[derive(Serialize)]
+pub struct Event{
+    #[serde(rename = "allDay")]
+    pub all_day:bool,//false
+   
+    pub title:String,
+    pub editable:bool,//false
+    #[serde(rename = "startEditable")]
+    pub start_editable:bool,//false
+    pub display:String,//'auto' or 'background'
+
+    #[serde(rename = "extendedProps")]
+    pub extended_props:String,//{}
+
+    #[serde(flatten)]
+    pub order:Order,
+}
+
 pub async fn get_appointments(
     State(pool):State<AxumPgPool>,
     Path(merchant_id):Path<Uuid>, 
     Query(params):Query<CalendarRequest>, 
     auth: AuthSession<AxumPgPool, AxumPgPool,User>,
-)->Result<Json<Vec<Order>>,(StatusCode,String)>{
+)->Result<Json<Vec<Event>>,(StatusCode,String)>{
     //检查登录
     let _=auth.identity.as_ref().ok_or((StatusCode::UNAUTHORIZED,"no login".to_string()))?;
 
@@ -50,11 +68,23 @@ pub async fn get_appointments(
     let mut conn=pool.pool.get().unwrap();//TODO error
   
     let data=orders::dsl::orders
+        .left_join(members::table.on(orders::member_id.eq(orders::member_id)))
+        .inner_join(barbers::table.on(orders::barber_id.eq(barbers::barber_id)))
+        .inner_join(service_types::table.on(orders::service_type_id.eq(service_types::service_type_id)))
         .filter(orders::dsl::enabled.eq(true))
         .filter(orders::dsl::merchant_id.eq(merchant_id))
         .filter(orders::dsl::end_time.ge(params.start_date).and(orders::dsl::start_time.lt(params.end_date)))
         .order(orders::dsl::create_time.desc())
-        .get_results::<Order>(&mut *conn)
+        .get_results::<(Order,Option<Member>,Barber,ServiceType)>(&mut *conn)
+        .map(|v|v.into_iter().map(|t|Event{
+            all_day:false,
+            editable:false,
+            start_editable:false,
+            display:"auto".into(),
+            title:format!("{} {} {}",if let Some(m)=t.1 {m.real_name.unwrap_or("-".into())} else {t.0.consumer_type.clone()},t.3.name,t.2.real_name.unwrap_or("-".into()) ),
+            extended_props:"{}".into(),
+            order:t.0,
+        }).collect())
         .map_err(|e|(StatusCode::INTERNAL_SERVER_ERROR,e.to_string()))?;
     
     Ok(Json(data))
@@ -120,7 +150,7 @@ pub async fn get_appointment(
     State(pool):State<AxumPgPool>,
     Path((merchant_id,appointment_id)):Path<(Uuid,Uuid)>, 
     auth: AuthSession<AxumPgPool, AxumPgPool,User>,
-)->Result<Json<Order>,(StatusCode,String)>{
+)->Result<Json<Event>,(StatusCode,String)>{
     //检查登录
     let _=auth.identity.as_ref().ok_or((StatusCode::UNAUTHORIZED,"no login".to_string()))?;
 
@@ -130,11 +160,23 @@ pub async fn get_appointment(
 
     let mut conn=pool.pool.get().unwrap();//TODO error  
     
-    let appointment=orders::dsl::orders
+    let appointment=orders::table
+        .left_join(members::table.on(orders::member_id.eq(orders::member_id)))
+        .inner_join(barbers::table.on(orders::barber_id.eq(barbers::barber_id)))
+        .inner_join(service_types::table.on(orders::service_type_id.eq(service_types::service_type_id)))
         .filter(orders::dsl::enabled.eq(true))
         .filter(orders::dsl::merchant_id.eq(merchant_id))
         .filter(orders::dsl::order_id.eq(appointment_id))
-        .get_result::<Order>(&mut *conn)
+        .get_result::<(Order,Option<Member>,Barber,ServiceType)>(&mut *conn)
+        .map(|t|Event{
+            all_day:false,
+            editable:false,
+            start_editable:false,
+            display:"auto".into(),
+            title:format!("{} {} {}",if let Some(m)=t.1 {m.real_name.unwrap_or("-".into())} else {t.0.consumer_type.clone()},t.3.name,t.2.real_name.unwrap_or("-".into()) ),
+            extended_props:"{}".into(),
+            order:t.0,
+        })
         .map_err(|e|(StatusCode::INTERNAL_SERVER_ERROR,e.to_string()))?;
         
     Ok(Json(appointment))
