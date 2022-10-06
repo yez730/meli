@@ -4,6 +4,7 @@ use bigdecimal::BigDecimal;
 use chrono::{Local, DateTime};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
+use random_color::{Color, Luminosity, RandomColor};
 use crate::{
     schema::*,
     models::{Order, NewOrder, Member, Barber, ServiceType}, authorization_policy
@@ -45,9 +46,11 @@ pub struct Event{
     pub start_editable:bool,//false
     pub display:String,//'auto' or 'background'
 
+    #[serde(rename = "backgroundColor")]
+    pub background_color:String,
+
     #[serde(rename = "extendedProps")]
     pub extended_props:String,//{}
-
     #[serde(flatten)]
     pub order:Order,
 }
@@ -82,6 +85,7 @@ pub async fn get_appointments(
             all_day:false,
             editable:false,
             start_editable:false,
+            background_color:RandomColor::new().to_rgb_string(),
             display:"auto".into(),
             title:format!("{} {} {}",if let Some(m)=t.1 {m.real_name.unwrap_or("-".into())} else {t.0.consumer_type.clone()},t.3.name,t.2.real_name.unwrap_or("-".into()) ),
             extended_props:"{}".into(),
@@ -167,6 +171,7 @@ pub async fn get_appointment(
             all_day:false,
             editable:false,
             start_editable:false,
+            background_color:RandomColor::new().to_rgb_string(),
             display:"auto".into(),
             title:format!("{} {} {}",if let Some(m)=t.1 { m.real_name.unwrap_or("-".into()) } else { t.0.consumer_type.clone() }, t.3.name, t.2.real_name.unwrap_or("-".into()) ),
             extended_props:"{}".into(),
