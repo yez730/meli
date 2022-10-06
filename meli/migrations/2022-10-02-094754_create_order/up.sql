@@ -4,9 +4,8 @@ CREATE TABLE orders (
     id BIGSERIAL PRIMARY KEY,
     order_id UUID NOT NULL,
     merchant_id UUID NOT NULL,
-    date DATE NOT NULL,
-    start_time TIME NOT NULL,
-    end_time TIME NOT NULL,
+    start_time TIMESTAMPTZ NOT NULL,
+    end_time TIMESTAMPTZ NOT NULL,
     consumer_type VARCHAR NOT NULL, -- walk-in / member
     member_id UUID NULL,
     barber_id UUID NOT NULL, -- 理发师

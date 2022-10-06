@@ -430,9 +430,10 @@ pub struct Order{
     pub id: i64,
     pub order_id: Uuid,
     pub merchant_id: Uuid,
-    pub date:NaiveDate,
-    pub start_time:NaiveTime,
-    pub end_time:NaiveTime,
+    #[serde(with = "my_date_format")]
+    pub start_time: chrono::DateTime<Local>,
+    #[serde(with = "my_date_format")]
+    pub end_time: chrono::DateTime<Local>,
     pub consumer_type:String,  // walk-in / member
     pub member_id: Option<Uuid>,
     pub barber_id:Uuid,
@@ -458,9 +459,8 @@ pub struct Order{
 pub struct NewOrder<'a>{
     pub order_id: &'a Uuid,
     pub merchant_id: &'a Uuid,
-    pub date:&'a NaiveDate,
-    pub start_time:&'a NaiveTime,
-    pub end_time:&'a NaiveTime,
+    pub start_time:chrono::DateTime<Local>,
+    pub end_time:chrono::DateTime<Local>,
     pub consumer_type:&'a str,  // walk-in / member
     pub member_id: Option<&'a Uuid>,
     pub barber_id: &'a Uuid,

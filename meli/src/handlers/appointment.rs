@@ -1,12 +1,12 @@
 use axum::{http::StatusCode, Json, extract::{Query, Path, State}};
 use axum_session_authentication_middleware::session::AuthSession;
 use bigdecimal::BigDecimal;
-use chrono::{Local, NaiveDate, NaiveTime};
-use serde::{Deserialize, Serialize};
+use chrono::{Local, NaiveDate, NaiveTime, DateTime};
+use serde::{Deserialize};
 use uuid::Uuid;
 use crate::{
     schema::*,
-    models::{Order, NewUser, NewOrder, NewLoginInfo, NewPasswordLoginProvider}, authorization_policy
+    models::{Order, NewOrder}, authorization_policy
 };
 use diesel::{
     prelude::*, // for .filter
@@ -14,13 +14,11 @@ use diesel::{
     dsl::exists,
 }; 
 use crate::{models::User, axum_pg_pool::AxumPgPool};
-use super::{PaginatedListRequest,PaginatedListResponse};
 
 #[derive(Deserialize)]
 pub struct AppointmentRequest{
-    pub date:NaiveDate,
-    pub start_time:NaiveTime,
-    pub end_time:NaiveTime,
+    pub start_time:DateTime<Local>,
+    pub end_time:DateTime<Local>,
     pub service_type_id:Uuid,
     pub barber_id:Uuid,
     pub member_id:Option<Uuid>,
@@ -32,8 +30,8 @@ pub struct AppointmentRequest{
 
 #[derive(Deserialize)]
 pub struct CalendarRequest{
-    pub start_date:NaiveDate,
-    pub end_date:NaiveDate,
+    pub start_date:DateTime<Local>,
+    pub end_date:DateTime<Local>,
 }
 
 pub async fn get_appointments(
@@ -54,7 +52,7 @@ pub async fn get_appointments(
     let data=orders::dsl::orders
         .filter(orders::dsl::enabled.eq(true))
         .filter(orders::dsl::merchant_id.eq(merchant_id))
-        .filter(orders::dsl::date.ge(params.start_date).and(orders::dsl::date.lt(params.end_date)))
+        .filter(orders::dsl::end_time.ge(params.start_date).and(orders::dsl::start_time.lt(params.end_date)))
         .order(orders::dsl::create_time.desc())
         .get_results::<Order>(&mut *conn)
         .map_err(|e|(StatusCode::INTERNAL_SERVER_ERROR,e.to_string()))?;
@@ -91,9 +89,8 @@ pub async fn add_appointment(
 
     let new_appointment=NewOrder{
         order_id: &Uuid::new_v4(),
-        date: &req.date,
-        start_time:&req.start_time,
-        end_time:&req.end_time,
+        start_time:req.start_time,
+        end_time:req.end_time,
         merchant_id:&merchant_id,
         consumer_type:if req.member_id.is_none(){"walk-in" } else {"member"},
         member_id:req.member_id.as_ref(),
