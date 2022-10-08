@@ -3,6 +3,7 @@ use axum_session_authentication_middleware::session::AuthSession;
 use bigdecimal::BigDecimal;
 use chrono::{Local, DateTime};
 use serde::{Deserialize, Serialize};
+use serde_json::{json, Value};
 use uuid::Uuid;
 use random_color::{Color, Luminosity, RandomColor};
 use crate::{
@@ -50,7 +51,7 @@ pub struct Event{
     pub background_color:String,
 
     #[serde(rename = "extendedProps")]
-    pub extended_props:String,//{}
+    pub extended_props:Value,//{}
     #[serde(flatten)]
     pub order:Order,
 }
@@ -87,8 +88,13 @@ pub async fn get_appointments(
             start_editable:false,
             background_color:RandomColor::new().to_rgb_string(),
             display:"auto".into(),
-            title:format!("{} {} {}",if let Some(m)=t.1 {m.real_name.unwrap_or("-".into())} else {t.0.consumer_type.clone()},t.3.name,t.2.real_name.unwrap_or("-".into()) ),
-            extended_props:"{}".into(),
+            title: RandomColor::new().to_rgb_string(),
+            extended_props:json!({
+                "id":t.0.id,
+                "customer": if let Some(m)=t.1 {m.real_name.unwrap_or("-".into())} else {t.0.consumer_type.clone()},
+                "serviceName": t.3.name,
+                "barberName":t.2.real_name.unwrap_or("-".into())
+            }),
             order:t.0,
         }).collect())
         .map_err(|e|(StatusCode::INTERNAL_SERVER_ERROR,e.to_string()))?;
@@ -173,8 +179,13 @@ pub async fn get_appointment(
             start_editable:false,
             background_color:RandomColor::new().to_rgb_string(),
             display:"auto".into(),
-            title:format!("{} {} {}",if let Some(m)=t.1 { m.real_name.unwrap_or("-".into()) } else { t.0.consumer_type.clone() }, t.3.name, t.2.real_name.unwrap_or("-".into()) ),
-            extended_props:"{}".into(),
+            title: RandomColor::new().to_rgb_string(),
+            extended_props:json!({
+                "id":t.0.id,
+                "customer": if let Some(m)=t.1 {m.real_name.unwrap_or("-".into())} else {t.0.consumer_type.clone()},
+                "serviceName": t.3.name,
+                "barberName":t.2.real_name.unwrap_or("-".into())
+            }),
             order:t.0,
         })
         .map_err(|e|(StatusCode::INTERNAL_SERVER_ERROR,e.to_string()))?;
