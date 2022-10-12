@@ -94,11 +94,6 @@ pub async fn get_appointments(
                 "customer": if let Some(m)=t.1 {m.real_name.unwrap_or("-".into())} else {t.0.consumer_type.clone()},
                 "serviceName": t.3.name,
                 "barberName":t.2.real_name.unwrap_or("-".into()),
-                "startTime":t.0.start_time,
-                "endTime":t.0.end_time,
-                "remark":t.0.remark,
-                "amount":t.0.amount,
-                "total_minutes":(t.0.end_time-t.0.start_time).num_minutes(),
             }),
             order:t.0,
         }).collect())
@@ -189,7 +184,12 @@ pub async fn get_appointment(
                 "id":t.0.id,
                 "customer": if let Some(m)=t.1 {m.real_name.unwrap_or("-".into())} else {t.0.consumer_type.clone()},
                 "serviceName": t.3.name,
-                "barberName":t.2.real_name.unwrap_or("-".into())
+                "barberName":t.2.real_name.unwrap_or("-".into()),
+                "startTime":t.0.start_time,
+                "endTime":t.0.end_time,
+                "remark":t.0.remark,
+                "amount":t.0.amount,
+                "total_minutes":(t.0.end_time-t.0.start_time).num_minutes(),
             }),
             order:t.0,
         })
