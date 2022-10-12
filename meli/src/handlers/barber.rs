@@ -45,8 +45,10 @@ pub async fn get_barbers(
             .filter(barbers::dsl::merchant_id.eq(barber.merchant_id))
             .into_boxed();
         if let Some(key)=p.key.as_ref(){
-            query=query
-                .filter(barbers::dsl::cellphone.ilike(format!("%{key}%")).or(barbers::dsl::real_name.ilike(format!("%{key}%"))));   
+            if key.len()>0 {
+                query=query
+                    .filter(barbers::dsl::cellphone.ilike(format!("%{key}%")).or(barbers::dsl::real_name.ilike(format!("%{key}%"))));   
+            }
         }
         query
     };

@@ -46,9 +46,12 @@ pub async fn get_service_types(
             .filter(service_types::dsl::enabled.eq(true))
             .filter(service_types::dsl::merchant_id.eq(barber.merchant_id))
             .into_boxed();
-        if let Some(key)=p.key.as_ref(){
-            query=query
+        
+        if let Some(key)=p.key.as_ref() {
+            if key.len()>0 {
+                query=query
                 .filter(service_types::dsl::name.ilike(format!("%{key}%")));   
+            }
         }
         query
     };
