@@ -74,7 +74,7 @@ pub async fn get_appointments(
         .unwrap().unwrap();
 
     let data=orders::dsl::orders
-        .left_join(members::table.on(orders::member_id.eq(orders::member_id)))
+        .left_join(members::table.on(members::member_id.nullable().eq(orders::member_id)))
         .inner_join(barbers::table.on(orders::barber_id.eq(barbers::barber_id)))
         .inner_join(service_types::table.on(orders::service_type_id.eq(service_types::service_type_id)))
         .filter(orders::dsl::enabled.eq(true))
@@ -166,7 +166,7 @@ pub async fn get_appointment(
         .unwrap().unwrap();
 
     let appointment=orders::table
-        .left_join(members::table.on(orders::member_id.eq(orders::member_id)))
+        .left_join(members::table.on(members::member_id.nullable().eq(orders::member_id)))
         .inner_join(barbers::table.on(orders::barber_id.eq(barbers::barber_id)))
         .inner_join(service_types::table.on(orders::service_type_id.eq(service_types::service_type_id)))
         .filter(orders::dsl::enabled.eq(true))
