@@ -86,9 +86,9 @@ pub async fn get_appointments(
             all_day:false,
             editable:false,
             start_editable:false,
-            background_color:RandomColor::new().to_rgb_string(),
+            background_color:RandomColor::new().to_rgb_string(), // rgb(139, 218, 232)
             display:"auto".into(),
-            title: RandomColor::new().to_rgb_string(),
+            title: "".into(),
             extended_props:json!({
                 "id":t.0.id,
                 "customer": if let Some(m)=t.1 {m.real_name.unwrap_or("-".into())} else {t.0.consumer_type.clone()},
@@ -177,9 +177,9 @@ pub async fn get_appointment(
             all_day:false,
             editable:false,
             start_editable:false,
-            background_color:RandomColor::new().to_rgb_string(),
+            background_color:RandomColor::new().to_rgb_string(), // rgb(139, 218, 232)
             display:"auto".into(),
-            title: RandomColor::new().to_rgb_string(),
+            title: "".into(),
             extended_props:json!({
                 "id":t.0.id,
                 "customer": if let Some(m)=t.1 {m.real_name.unwrap_or("-".into())} else {t.0.consumer_type.clone()},
