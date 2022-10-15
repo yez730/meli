@@ -13,7 +13,7 @@ use crate::{
 use diesel::{
     prelude::*, // for .filter
     select, 
-    dsl::exists,
+    dsl::exists, expression::is_aggregate::No,
 }; 
 use crate::{models::User, axum_pg_pool::AxumPgPool};
 
@@ -162,6 +162,7 @@ pub async fn add_appointment(
             title: "".into(),
             extended_props:json!({
                 "id":t.0.id,
+                "memberId": t.1.as_ref().map(|m|m.member_id),
                 "customer": if let Some(m)=t.1 {m.real_name.unwrap_or("-".into())} else {t.0.consumer_type.clone()},
                 "serviceName": t.3.name,
                 "barberName":t.2.real_name.unwrap_or("-".into()),
@@ -174,7 +175,6 @@ pub async fn add_appointment(
             order:t.0,
         })
         .map_err(|e|(StatusCode::INTERNAL_SERVER_ERROR,e.to_string()))?;
-    
     Ok(Json(event))
 }
 
@@ -212,6 +212,7 @@ pub async fn get_appointment(
             title: "".into(),
             extended_props:json!({
                 "id":t.0.id,
+                "memberId": t.1.as_ref().map(|m|m.member_id),
                 "customer": if let Some(m)=t.1 {m.real_name.unwrap_or("-".into())} else {t.0.consumer_type.clone()},
                 "serviceName": t.3.name,
                 "barberName":t.2.real_name.unwrap_or("-".into()),
