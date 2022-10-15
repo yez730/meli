@@ -73,7 +73,7 @@ pub async fn add_barber(
     State(pool):State<AxumPgPool>,
     auth: AuthSession<AxumPgPool, AxumPgPool,User>,
     Json(req): Json<BarberRequest>
-)->Result<(),(StatusCode,String)>{
+)->Result<Json<Barber>,(StatusCode,String)>{
     //检查登录
     let _=auth.identity.as_ref().ok_or((StatusCode::UNAUTHORIZED,"no login".to_string()))?;
 
@@ -171,9 +171,15 @@ pub async fn add_barber(
             tracing::error!("{}",e.to_string());
             (StatusCode::INTERNAL_SERVER_ERROR,e.to_string())
         })?;
+
+        let barber=barbers::dsl::barbers
+            .filter(barbers::dsl::enabled.eq(true))
+            .filter(barbers::dsl::barber_id.eq(new_barber.barber_id))
+            .get_result::<Barber>(&mut *conn)
+            .map_err(|e|(StatusCode::INTERNAL_SERVER_ERROR,e.to_string()))?;
+        
+        Ok(Json(barber))
     }
-    
-    Ok(())
 }
 
 pub async fn delete_barber(

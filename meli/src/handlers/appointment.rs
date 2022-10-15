@@ -106,7 +106,7 @@ pub async fn add_appointment(
     State(pool):State<AxumPgPool>,
     auth: AuthSession<AxumPgPool, AxumPgPool,User>,
     Json(req): Json<AppointmentRequest>
-)->Result<(),(StatusCode,String)>{
+)->Result<Json<Event>,(StatusCode,String)>{
     //检查登录
     let _=auth.identity.as_ref().ok_or((StatusCode::UNAUTHORIZED,"no login".to_string()))?;
 
@@ -144,8 +144,38 @@ pub async fn add_appointment(
         tracing::error!("{}",e.to_string());
         (StatusCode::INTERNAL_SERVER_ERROR,e.to_string())
     })?;
+
+    let event=orders::table
+        .left_join(members::table.on(members::member_id.nullable().eq(orders::member_id)))
+        .inner_join(barbers::table.on(orders::barber_id.eq(barbers::barber_id)))
+        .inner_join(service_types::table.on(orders::service_type_id.eq(service_types::service_type_id)))
+        .filter(orders::dsl::enabled.eq(true))
+        .filter(orders::dsl::merchant_id.eq(barber.merchant_id))
+        .filter(orders::dsl::order_id.eq(new_appointment.order_id))
+        .get_result::<(Order,Option<Member>,Barber,ServiceType)>(&mut *conn)
+        .map(|t|Event{
+            all_day:false,
+            editable:false,
+            start_editable:false,
+            background_color:RandomColor::new().to_rgb_string(), // rgb(139, 218, 232)
+            display:"auto".into(),
+            title: "".into(),
+            extended_props:json!({
+                "id":t.0.id,
+                "customer": if let Some(m)=t.1 {m.real_name.unwrap_or("-".into())} else {t.0.consumer_type.clone()},
+                "serviceName": t.3.name,
+                "barberName":t.2.real_name.unwrap_or("-".into()),
+                "startTime":t.0.start_time,
+                "endTime":t.0.end_time,
+                "remark":t.0.remark,
+                "amount":t.0.amount,
+                "total_minutes":(t.0.end_time-t.0.start_time).num_minutes(),
+            }),
+            order:t.0,
+        })
+        .map_err(|e|(StatusCode::INTERNAL_SERVER_ERROR,e.to_string()))?;
     
-    Ok(())
+    Ok(Json(event))
 }
 
 pub async fn get_appointment(
@@ -165,7 +195,7 @@ pub async fn get_appointment(
     let barber=serde_json::from_str::<Option<Barber>>(auth.axum_session.lock().unwrap().get_data("barber"))
         .unwrap().unwrap();
 
-    let appointment=orders::table
+    let event=orders::table
         .left_join(members::table.on(members::member_id.nullable().eq(orders::member_id)))
         .inner_join(barbers::table.on(orders::barber_id.eq(barbers::barber_id)))
         .inner_join(service_types::table.on(orders::service_type_id.eq(service_types::service_type_id)))
@@ -195,5 +225,5 @@ pub async fn get_appointment(
         })
         .map_err(|e|(StatusCode::INTERNAL_SERVER_ERROR,e.to_string()))?;
         
-    Ok(Json(appointment))
+    Ok(Json(event))
 }

@@ -76,7 +76,7 @@ pub async fn add_service_type(
     State(pool):State<AxumPgPool>,
     auth: AuthSession<AxumPgPool, AxumPgPool,User>,
     Json(req): Json<ServiceTypeRequest>
-)->Result<(),(StatusCode,String)>{
+)->Result<Json<ServiceType>,(StatusCode,String)>{
     //检查登录
     let _=auth.identity.as_ref().ok_or((StatusCode::UNAUTHORIZED,"no login".to_string()))?;
 
@@ -95,7 +95,7 @@ pub async fn add_service_type(
         .filter(service_types::dsl::merchant_id.eq(barber.merchant_id))))
         .get_result::<bool>(&mut *conn)
         .ok();
-
+    
     if let Some(true)=existed{
         return Err((StatusCode::INTERNAL_SERVER_ERROR,"已存在该服务名称".to_string()));
     } else {
@@ -117,9 +117,16 @@ pub async fn add_service_type(
             tracing::error!("{}",e.to_string());
             (StatusCode::INTERNAL_SERVER_ERROR,e.to_string())
         })?;
+
+        let service_type=service_types::dsl::service_types
+        .filter(service_types::dsl::enabled.eq(true))
+        .filter(service_types::dsl::service_type_id.eq(new_service_type.service_type_id))
+        .filter(service_types::dsl::merchant_id.eq(barber.merchant_id))
+        .get_result::<ServiceType>(&mut *conn)
+        .map_err(|e|(StatusCode::INTERNAL_SERVER_ERROR,e.to_string()))?;
+        
+        Ok(Json(service_type))
     }
-    
-    Ok(())
 }
 
 pub async fn delete_service_type(

@@ -85,7 +85,7 @@ pub async fn add_member(
     State(pool):State<AxumPgPool>,
     auth: AuthSession<AxumPgPool, AxumPgPool,User>,
     Json(req): Json<MemberRequest>
-)->Result<(),(StatusCode,String)>{
+)->Result<Json<MemberResponse>,(StatusCode,String)>{
     //检查登录
     let _=auth.identity.as_ref().ok_or((StatusCode::UNAUTHORIZED,"no login".to_string()))?;
 
@@ -105,7 +105,10 @@ pub async fn add_member(
         .get_result::<Member>(&mut *conn)
         .ok();
 
+    let mut member_id=Uuid::new_v4();
     if let Some(member)=existed{
+        member_id=member.member_id;
+
         let exist_member=select(exists(
             merchant_members::dsl::merchant_members
             .filter(merchant_members::dsl::enabled.eq(true))
@@ -130,6 +133,7 @@ pub async fn add_member(
             update_time: Local::now(),
             data: None,
         };
+
         diesel::insert_into(merchant_members::table)
         .values(&new_balance)
         .execute(&mut *conn).map_err(|e|{
@@ -196,7 +200,7 @@ pub async fn add_member(
         // 3. add member.
         let new_member=NewMember{
             user_id:  &user_id,
-            member_id: &Uuid::new_v4(),
+            member_id: &member_id,
             cellphone:&req.cellphone,
             real_name:req.real_name.as_deref(),
             gender:req.gender.as_deref(),
@@ -232,7 +236,16 @@ pub async fn add_member(
         })?;
     }
     
-    Ok(())
+    let member=members::dsl::members.inner_join(merchant_members::dsl::merchant_members.on(members::dsl::member_id.eq(merchant_members::dsl::member_id)))
+    .filter(members::dsl::enabled.eq(true))
+    .filter(merchant_members::dsl::enabled.eq(true))
+    .filter(merchant_members::dsl::member_id.eq(member_id))
+    .filter(merchant_members::dsl::merchant_id.eq(barber.merchant_id))
+    .get_result::<(Member, MerchantMember)>(&mut *conn)
+    .map(|(m,b)|MemberResponse { member: m, balance: b })
+    .map_err(|e|(StatusCode::INTERNAL_SERVER_ERROR,e.to_string()))?;
+    Ok(Json(member))
+
 }
 
 pub async fn delete_member(
