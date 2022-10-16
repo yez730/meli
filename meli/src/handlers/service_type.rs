@@ -14,7 +14,7 @@ use diesel::{
     dsl::exists,
 }; 
 use crate::{models::User, axum_pg_pool::AxumPgPool};
-use super::{PaginatedListRequest,PaginatedListResponse};
+use super::{PaginatedListRequest,PaginatedListResponse, Search};
 
 #[derive(Deserialize)]
 pub struct ServiceTypeRequest{
@@ -27,6 +27,7 @@ pub struct ServiceTypeRequest{
 pub async fn get_service_types(
     State(pool):State<AxumPgPool>,
     Query(params):Query<PaginatedListRequest>, 
+    Query(search):Query<Search>, 
     auth: AuthSession<AxumPgPool, AxumPgPool,User>,
 )->Result<Json<PaginatedListResponse<ServiceType>>,(StatusCode,String)>{
     //检查登录
@@ -47,7 +48,7 @@ pub async fn get_service_types(
             .filter(service_types::dsl::merchant_id.eq(barber.merchant_id))
             .into_boxed();
         
-        if let Some(key)=p.key.as_ref() {
+        if let Some(key)=search.key.as_ref() {
             if key.len()>0 {
                 query=query
                 .filter(service_types::dsl::name.ilike(format!("%{key}%")));   

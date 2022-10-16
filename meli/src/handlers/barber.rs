@@ -13,7 +13,7 @@ use diesel::{
     dsl::exists,
 }; 
 use crate::{models::User, axum_pg_pool::AxumPgPool};
-use super::{PaginatedListRequest,PaginatedListResponse};
+use super::Search;
 
 #[derive(Deserialize)]
 pub struct BarberRequest{
@@ -24,9 +24,9 @@ pub struct BarberRequest{
 
 pub async fn get_barbers(
     State(pool):State<AxumPgPool>,
-    Query(params):Query<PaginatedListRequest>, 
+    Query(search):Query<Search>, 
     auth: AuthSession<AxumPgPool, AxumPgPool,User>,
-)->Result<Json<PaginatedListResponse<Barber>>,(StatusCode,String)>{
+)->Result<Json<Vec<Barber>>,(StatusCode,String)>{
     //检查登录
     let _=auth.identity.as_ref().ok_or((StatusCode::UNAUTHORIZED,"no login".to_string()))?;
 
@@ -39,34 +39,23 @@ pub async fn get_barbers(
     let barber=serde_json::from_str::<Option<Barber>>(auth.axum_session.lock().unwrap().get_data("barber"))
 	    .unwrap().unwrap();
 
-    let get_barbers_query=|p:&PaginatedListRequest|{
-        let mut query=barbers::dsl::barbers
-            .filter(barbers::dsl::enabled.eq(true))
-            .filter(barbers::dsl::merchant_id.eq(barber.merchant_id))
-            .into_boxed();
-        if let Some(key)=p.key.as_ref(){
-            if key.len()>0 {
-                query=query
-                    .filter(barbers::dsl::cellphone.ilike(format!("%{key}%")).or(barbers::dsl::real_name.ilike(format!("%{key}%"))));   
-            }
-        }
-        query
-    };
+    let mut query=barbers::dsl::barbers
+    .filter(barbers::dsl::enabled.eq(true))
+    .filter(barbers::dsl::merchant_id.eq(barber.merchant_id))
+    .into_boxed();
 
-    let count=get_barbers_query(&params).count().get_result(&mut *conn).map_err(|e|(StatusCode::INTERNAL_SERVER_ERROR,e.to_string()))?;
-    let data=get_barbers_query(&params)
+    if let Some(key)=search.key.as_ref(){
+        if key.len()>0 {
+            query=query.filter(barbers::dsl::cellphone.ilike(format!("%{key}%")).or(barbers::dsl::real_name.ilike(format!("%{key}%"))));   
+        }
+    }
+
+    let data=query
         .order(barbers::dsl::create_time.desc())
-        .limit(params.page_size)
-        .offset(params.page_index*params.page_size)
         .get_results::<Barber>(&mut *conn)
         .map_err(|e|(StatusCode::INTERNAL_SERVER_ERROR,e.to_string()))?;
     
-    Ok(Json(PaginatedListResponse{
-        page_index:params.page_index,
-        page_size:params.page_size,
-        total_count:count,
-        data:data,
-    }))
+    Ok(Json(data))
 }
 
 pub async fn add_barber(

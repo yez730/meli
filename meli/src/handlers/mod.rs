@@ -27,7 +27,10 @@ pub struct PaginatedListRequest {
 
     //分页大小
     page_size:i64,
+}
 
+#[derive(Deserialize)]
+pub struct Search{
     //搜索框
     key:Option<String>,
 }

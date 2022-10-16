@@ -14,7 +14,7 @@ use diesel::{
     dsl::exists,
 }; 
 use crate::{models::User, axum_pg_pool::AxumPgPool};
-use super::{PaginatedListRequest,PaginatedListResponse};
+use super::{PaginatedListRequest,PaginatedListResponse, Search};
 
 #[derive(Deserialize)]
 pub struct MemberRequest{
@@ -35,6 +35,7 @@ pub struct MemberResponse{
 pub async fn get_members(
     State(pool):State<AxumPgPool>,
     Query(params):Query<PaginatedListRequest>, 
+    Query(search):Query<Search>, 
     auth: AuthSession<AxumPgPool, AxumPgPool,User>,
 )->Result<Json<PaginatedListResponse<MemberResponse>>,(StatusCode,String)>{
     //检查登录
@@ -55,7 +56,7 @@ pub async fn get_members(
             .filter(merchant_members::dsl::enabled.eq(true))
             .filter(merchant_members::dsl::merchant_id.eq(barber.merchant_id))
             .into_boxed();
-        if let Some(key)=p.key.as_ref(){
+        if let Some(key)=search.key.as_ref(){
             if key.len()>0{
                 query=query
                     .filter(members::dsl::cellphone.ilike(format!("%{key}%")).or(members::dsl::real_name.ilike(format!("%{key}%"))));  
