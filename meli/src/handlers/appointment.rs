@@ -17,6 +17,8 @@ use diesel::{
 }; 
 use crate::{models::User, axum_pg_pool::AxumPgPool};
 
+use super::Search;
+
 #[derive(Deserialize)]
 pub struct AppointmentRequest{
     pub start_time:DateTime<Local>,
@@ -59,7 +61,7 @@ pub struct Event{
 pub async fn get_appointments(
     State(pool):State<AxumPgPool>,
     Query(params):Query<CalendarRequest>, 
-    Query(barber_id):Query<Option<Uuid>>, 
+    Query(search):Query<Search>, 
     auth: AuthSession<AxumPgPool, AxumPgPool,User>,
 )->Result<Json<Vec<Event>>,(StatusCode,String)>{
     //检查登录
@@ -83,7 +85,7 @@ pub async fn get_appointments(
         .filter(orders::dsl::end_time.ge(params.start_date).and(orders::dsl::start_time.lt(params.end_date)))
         .into_boxed();
 
-    if let Some(barber_id)=barber_id{
+    if let Some(barber_id)=search.barber_id{
         query=query.filter(orders::dsl::barber_id.eq(barber_id))
     }
 

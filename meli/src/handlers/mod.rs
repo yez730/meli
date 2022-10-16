@@ -5,6 +5,7 @@ pub mod appointment;
 pub mod service_type;
 
 use serde::{Serialize, Deserialize};
+use uuid::Uuid;
 
 #[derive(Serialize)]
 pub struct PaginatedListResponse<T:Serialize> {
@@ -33,4 +34,6 @@ pub struct PaginatedListRequest {
 pub struct Search{
     //搜索框
     key:Option<String>,
+
+    barber_id:Option<Uuid>,
 }
