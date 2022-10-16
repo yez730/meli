@@ -59,6 +59,7 @@ pub struct Event{
 pub async fn get_appointments(
     State(pool):State<AxumPgPool>,
     Query(params):Query<CalendarRequest>, 
+    Query(barber_id):Query<Option<Uuid>>, 
     auth: AuthSession<AxumPgPool, AxumPgPool,User>,
 )->Result<Json<Vec<Event>>,(StatusCode,String)>{
     //检查登录
@@ -73,14 +74,20 @@ pub async fn get_appointments(
     let barber=serde_json::from_str::<Option<Barber>>(auth.axum_session.lock().unwrap().get_data("barber"))
         .unwrap().unwrap();
 
-    let data=orders::dsl::orders
+    let mut query=orders::dsl::orders
         .left_join(members::table.on(members::member_id.nullable().eq(orders::member_id)))
         .inner_join(barbers::table.on(orders::barber_id.eq(barbers::barber_id)))
         .inner_join(service_types::table.on(orders::service_type_id.eq(service_types::service_type_id)))
         .filter(orders::dsl::enabled.eq(true))
         .filter(orders::dsl::merchant_id.eq(barber.merchant_id))
         .filter(orders::dsl::end_time.ge(params.start_date).and(orders::dsl::start_time.lt(params.end_date)))
-        .order(orders::dsl::create_time.desc())
+        .into_boxed();
+
+    if let Some(barber_id)=barber_id{
+        query=query.filter(orders::dsl::barber_id.eq(barber_id))
+    }
+
+    let data= query .order(orders::dsl::create_time.desc())
         .get_results::<(Order,Option<Member>,Barber,ServiceType)>(&mut *conn)
         .map(|v|v.into_iter().map(|t|Event{
             all_day:false,
