@@ -56,12 +56,19 @@ pub async fn get_members(
             .filter(merchant_members::dsl::enabled.eq(true))
             .filter(merchant_members::dsl::merchant_id.eq(barber.merchant_id))
             .into_boxed();
+            
         if let Some(key)=search.key.as_ref(){
             if key.len()>0{
-                query=query
-                    .filter(members::dsl::cellphone.ilike(format!("%{key}%")).or(members::dsl::real_name.ilike(format!("%{key}%"))));  
+                query=query.filter(members::dsl::cellphone.ilike(format!("%{key}%")).or(members::dsl::real_name.ilike(format!("%{key}%"))));  
             }
         }
+
+        if let Some(gender)=search.filter_gender.as_ref(){
+            if gender.len()>0{
+                query=query.filter(members::dsl::gender.eq(gender));  
+            }
+        }
+
         query
     };
 

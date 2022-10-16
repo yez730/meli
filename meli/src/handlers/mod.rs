@@ -36,4 +36,6 @@ pub struct Search{
     key:Option<String>,
 
     barber_id:Option<Uuid>,
+
+    filter_gender:Option<String>,
 }
