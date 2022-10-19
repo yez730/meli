@@ -11,6 +11,8 @@ use diesel::{
 use crate::{models::User, axum_pg_pool::AxumPgPool, login_manager::{get_login_info, password_login::verify_password}};
 use axum_session_authentication_middleware::{ user as auth_user,session::Authentication};
 
+use super::barber::BarberResonse;
+
 #[derive(Deserialize)]
 pub struct LoginRequest{
     pub username:String,
@@ -22,13 +24,6 @@ pub struct LoginResponse{
     pub identity:auth_user::Identity,
     pub barber :Option<BarberResonse>,
     pub member:Option<Member>
-}
-
-#[derive(Serialize)]
-pub struct BarberResonse{
-    #[serde(flatten)]
-    pub barber :Barber,
-    pub merchant:Merchant
 }
 
 pub async fn login_by_username(State(pool):State<AxumPgPool>,mut auth: AuthSession<AxumPgPool, AxumPgPool,User>,Json(req):Json<LoginRequest>)->Result<Json<LoginResponse>,(StatusCode,String)>{
@@ -47,6 +42,7 @@ pub async fn login_by_username(State(pool):State<AxumPgPool>,mut auth: AuthSessi
         .inner_join(merchants::table.on(barbers::merchant_id.eq(merchants::merchant_id)))
         .filter(barbers::dsl::user_id.eq(user.user_id))
         .filter(barbers::dsl::enabled.eq(true))
+        .filter(merchants::dsl::enabled.eq(true))
         .get_result::<(Barber,Merchant)>(&mut *conn)
         .ok();
 

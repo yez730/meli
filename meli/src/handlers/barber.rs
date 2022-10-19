@@ -5,7 +5,7 @@ use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 use crate::{
     schema::*,
-    models::{Barber, NewUser, NewBarber, NewLoginInfo, NewPasswordLoginProvider}, authorization_policy
+    models::{Barber, NewUser, NewBarber, NewLoginInfo, NewPasswordLoginProvider, Merchant}, authorization_policy
 };
 use diesel::{
     prelude::*, // for .filter
@@ -22,11 +22,18 @@ pub struct BarberRequest{
     pub email:Option<String>,
 }
 
+#[derive(Serialize)]
+pub struct BarberResonse{
+    #[serde(flatten)]
+    pub barber :Barber,
+    pub merchant:Merchant
+}
+
 pub async fn get_barbers(
     State(pool):State<AxumPgPool>,
     Query(search):Query<Search>, 
     auth: AuthSession<AxumPgPool, AxumPgPool,User>,
-)->Result<Json<Vec<Barber>>,(StatusCode,String)>{
+)->Result<Json<Vec<BarberResonse>>,(StatusCode,String)>{
     //检查登录
     let _=auth.identity.as_ref().ok_or((StatusCode::UNAUTHORIZED,"no login".to_string()))?;
 
@@ -40,6 +47,8 @@ pub async fn get_barbers(
 	    .unwrap().unwrap();
 
     let mut query=barbers::dsl::barbers
+    .inner_join(merchants::table.on(barbers::merchant_id.eq(merchants::merchant_id)))
+    .filter(merchants::dsl::enabled.eq(true))
     .filter(barbers::dsl::enabled.eq(true))
     .filter(barbers::dsl::merchant_id.eq(barber.merchant_id))
     .into_boxed();
@@ -52,7 +61,9 @@ pub async fn get_barbers(
 
     let data=query
         .order(barbers::dsl::create_time.desc())
-        .get_results::<Barber>(&mut *conn)
+        .get_results::<(Barber,Merchant)>(&mut *conn)
+        .map(|bm|bm.into_iter().map(|(b,m)| BarberResonse { barber: b, merchant: m }).collect())
+        
         .map_err(|e|(StatusCode::INTERNAL_SERVER_ERROR,e.to_string()))?;
     
     Ok(Json(data))
@@ -62,7 +73,7 @@ pub async fn add_barber(
     State(pool):State<AxumPgPool>,
     auth: AuthSession<AxumPgPool, AxumPgPool,User>,
     Json(req): Json<BarberRequest>
-)->Result<Json<Barber>,(StatusCode,String)>{
+)->Result<Json<BarberResonse>,(StatusCode,String)>{
     //检查登录
     let _=auth.identity.as_ref().ok_or((StatusCode::UNAUTHORIZED,"no login".to_string()))?;
 
@@ -162,9 +173,12 @@ pub async fn add_barber(
         })?;
 
         let barber=barbers::dsl::barbers
+            .inner_join(merchants::table.on(barbers::merchant_id.eq(merchants::merchant_id)))
+            .filter(merchants::dsl::enabled.eq(true))
             .filter(barbers::dsl::enabled.eq(true))
             .filter(barbers::dsl::barber_id.eq(new_barber.barber_id))
-            .get_result::<Barber>(&mut *conn)
+            .get_result::<(Barber,Merchant)>(&mut *conn)
+            .map(|bm|BarberResonse{ barber:bm.0,merchant:bm.1})
             .map_err(|e|(StatusCode::INTERNAL_SERVER_ERROR,e.to_string()))?;
         
         Ok(Json(barber))
@@ -248,7 +262,7 @@ pub async fn get_barber(
     State(pool):State<AxumPgPool>,
     Path(barber_id):Path<Uuid>, 
     auth: AuthSession<AxumPgPool, AxumPgPool,User>,
-)->Result<Json<Barber>,(StatusCode,String)>{
+)->Result<Json<BarberResonse>,(StatusCode,String)>{
     //检查登录
     let _=auth.identity.as_ref().ok_or((StatusCode::UNAUTHORIZED,"no login".to_string()))?;
 
@@ -259,9 +273,12 @@ pub async fn get_barber(
     let mut conn=pool.pool.get().unwrap();//TODO error  
     
     let barber=barbers::dsl::barbers
+        .inner_join(merchants::table.on(barbers::merchant_id.eq(merchants::merchant_id)))
+        .filter(merchants::dsl::enabled.eq(true))
         .filter(barbers::dsl::enabled.eq(true))
         .filter(barbers::dsl::barber_id.eq(barber_id))
-        .get_result::<Barber>(&mut *conn)
+        .get_result::<(Barber,Merchant)>(&mut *conn)
+        .map(|bm|BarberResonse{ barber:bm.0,merchant:bm.1})
         .map_err(|e|(StatusCode::INTERNAL_SERVER_ERROR,e.to_string()))?;
         
     Ok(Json(barber))

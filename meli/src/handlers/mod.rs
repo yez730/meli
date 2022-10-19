@@ -7,6 +7,8 @@ pub mod service_type;
 use serde::{Serialize, Deserialize};
 use uuid::Uuid;
 
+use crate::models::{Barber, Merchant};
+
 #[derive(Serialize)]
 pub struct PaginatedListResponse<T:Serialize> {
     //分页索引，从 0 开始
