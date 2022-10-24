@@ -8,11 +8,7 @@ use crate::{
     schema::*,
     models::{Member, NewUser, NewMember,  NewMerchantMember, MerchantMember, NewRechargeRecord, Barber, LoginInfo, NewLoginInfo}, authorization_policy, constant
 };
-use diesel::{
-    prelude::*, // for .filter
-    select, 
-    dsl::exists,
-}; 
+use diesel::prelude::*; 
 use crate::{models::User, axum_pg_pool::AxumPgPool};
 use super::{PaginatedListRequest,PaginatedListResponse, Search};
 
@@ -105,56 +101,37 @@ pub async fn add_member(
     
     let merchant_id=serde_json::from_str::<Uuid>(auth.axum_session.lock().unwrap().get_data(constant::MERCHANT_ID)).unwrap();
 
-    let member_response;
-
     let login_info=login_infos::table
-    .filter(login_infos::enabled.eq(true))
-    .filter(login_infos::login_info_type.eq("Cellphone"))
-    .filter(login_infos::login_info_account.eq(req.cellphone.clone())) //TODO cellphone nullable
-    .get_result::<LoginInfo>(&mut *conn)
-    .ok();
+        .filter(login_infos::enabled.eq(true))
+        .filter(login_infos::login_info_type.eq("Cellphone"))
+        .filter(login_infos::login_info_account.eq(req.cellphone.clone()))
+        .get_result::<LoginInfo>(&mut *conn)
+        .ok();
+
+    let member;
+
     if let Some(login_info)=login_info {
-        let member=members::table 
+        let existed_member=members::table 
             .filter(members::enabled.eq(true))
             .filter(members::user_id.eq(login_info.user_id))
             .get_result::<Member>(&mut *conn)
             .ok();
-        if let Some(member)=member{
+        if let Some(existed_member)=existed_member{
             let merchant_member=merchant_members::table
                 .filter(merchant_members::enabled.eq(true))
                 .filter(merchant_members::merchant_id.eq(merchant_id))
-                .filter(merchant_members::member_id.eq(member.member_id))
+                .filter(merchant_members::member_id.eq(existed_member.member_id))
                 .get_result::<MerchantMember>(&mut *conn)
                 .ok();
             if merchant_member.is_some(){
                 return Err((StatusCode::BAD_REQUEST,"当前商户下已存在该手机号码的会员".to_string()));
             }
 
-            //TODO permissions
+            //TODO update member 商户不允许
 
-            let new_balance=NewMerchantMember{
-                merchant_id:&merchant_id,
-                member_id: &member.member_id,
-                balance:&BigDecimal::zero(),
-    
-                enabled:true,
-                create_time: Local::now(),
-                update_time: Local::now(),
-                data: None,
-            };
-    
-            let balance=diesel::insert_into(merchant_members::table)
-            .values(&new_balance)
-            .get_result::<MerchantMember>(&mut *conn).map_err(|e|{
-                tracing::error!("{}",e.to_string());
-                (StatusCode::INTERNAL_SERVER_ERROR,e.to_string())
-            })?;
+            tracing::debug!("{}",format!("已存在会员 user_id: {}",existed_member.user_id));
 
-            member_response=MemberResponse{
-                member,
-                balance,
-            };
-
+            member=existed_member;            
         } else {
             let new_member=NewMember{
                 user_id:  &login_info.user_id,
@@ -169,34 +146,12 @@ pub async fn add_member(
                 data: None,
                 remark:None,
             };
-            let member=diesel::insert_into(members::table)
+            member=diesel::insert_into(members::table)
             .values(&new_member)
             .get_result::<Member>(&mut *conn).map_err(|e|{
                 tracing::error!("{}",e.to_string());
                 (StatusCode::INTERNAL_SERVER_ERROR,e.to_string())
             })?;
-
-            let new_balance=NewMerchantMember{
-                merchant_id:&merchant_id,
-                member_id: &new_member.member_id,
-                balance:&BigDecimal::zero(),
-
-                enabled:true,
-                create_time: Local::now(),
-                update_time: Local::now(),
-                data: None,
-            };
-            let balance= diesel::insert_into(merchant_members::table)
-            .values(&new_balance)
-            .get_result::<MerchantMember>(&mut *conn).map_err(|e|{
-                tracing::error!("{}",e.to_string());
-                (StatusCode::INTERNAL_SERVER_ERROR,e.to_string())
-            })?;
-
-            member_response=MemberResponse{
-                member,
-                balance,
-            };
         }
     } else{
         let user_id=Uuid::new_v4();
@@ -246,35 +201,37 @@ pub async fn add_member(
             data: None,
             remark:None,
         };
-        let member=diesel::insert_into(members::table)
+        member=diesel::insert_into(members::table)
         .values(&new_member)
         .get_result::<Member>(&mut *conn).map_err(|e|{
             tracing::error!("{}",e.to_string());
             (StatusCode::INTERNAL_SERVER_ERROR,e.to_string())
-        })?;
-
-        let new_balance=NewMerchantMember{
-            merchant_id:&merchant_id,
-            member_id: &new_member.member_id,
-            balance:&BigDecimal::zero(),
-
-            enabled:true,
-            create_time: Local::now(),
-            update_time: Local::now(),
-            data: None,
-        };
-        let balance=diesel::insert_into(merchant_members::table)
-        .values(&new_balance)
-        .get_result::<MerchantMember>(&mut *conn).map_err(|e|{
-            tracing::error!("{}",e.to_string());
-            (StatusCode::INTERNAL_SERVER_ERROR,e.to_string())
-        })?;
-
-        member_response=MemberResponse{
-            member,
-            balance,
-        };
+        })?;        
     }
+
+    //TODO permissions & password login info
+
+    let new_balance=NewMerchantMember{
+        merchant_id:&merchant_id,
+        member_id: &member.member_id,
+        balance:&BigDecimal::zero(),
+
+        enabled:true,
+        create_time: Local::now(),
+        update_time: Local::now(),
+        data: None,
+    };
+    let balance=diesel::insert_into(merchant_members::table)
+    .values(&new_balance)
+    .get_result::<MerchantMember>(&mut *conn).map_err(|e|{
+        tracing::error!("{}",e.to_string());
+        (StatusCode::INTERNAL_SERVER_ERROR,e.to_string())
+    })?;
+
+    let member_response=MemberResponse{
+        member,
+        balance,
+    };
      
     Ok(Json(member_response))
 
@@ -295,6 +252,21 @@ pub async fn delete_member(
     let mut conn=pool.pool.get().unwrap();//TODO error
 
     let merchant_id=serde_json::from_str::<Uuid>(auth.axum_session.lock().unwrap().get_data(constant::MERCHANT_ID)).unwrap();
+
+    diesel::update(
+        merchant_members::table
+        .filter(merchant_members::member_id.eq(member_id))
+        .filter(merchant_members::merchant_id.eq(merchant_id))
+        .filter(merchant_members::enabled.eq(true))
+    )
+    .set((
+            merchant_members::enabled.eq(false),
+            merchant_members::update_time.eq(Local::now())
+        ))
+    .execute(&mut *conn).map_err(|e|{
+        tracing::error!("{}",e.to_string());
+        (StatusCode::INTERNAL_SERVER_ERROR,e.to_string())
+    })?;
 
     diesel::update(
         merchant_members::table
@@ -337,11 +309,11 @@ pub async fn update_member(
         .map_err(|e|(StatusCode::INTERNAL_SERVER_ERROR,e.to_string()))?;
 
     let login_info=login_infos::table
-    .filter(login_infos::enabled.eq(true))
-    .filter(login_infos::login_info_type.eq("Cellphone"))
-    .filter(login_infos::login_info_account.eq(req.cellphone.clone()))
-    .get_result::<LoginInfo>(&mut *conn)
-    .ok();
+        .filter(login_infos::enabled.eq(true))
+        .filter(login_infos::login_info_type.eq("Cellphone"))
+        .filter(login_infos::login_info_account.eq(req.cellphone.clone()))
+        .get_result::<LoginInfo>(&mut *conn)
+        .ok();
     if let Some(login_info)=login_info {
         if login_info.user_id!=member.user_id{
             return Err((StatusCode::BAD_REQUEST,"该手机号已被其他会员占用".to_string()));
@@ -442,7 +414,7 @@ pub async fn recharge(
         return Err((StatusCode::INTERNAL_SERVER_ERROR,"会员不存在".to_string()));
     }
 
-    let num=diesel::update(
+    diesel::update(
         merchant_members::table
         .filter(merchant_members::member_id.eq(member_id))
         .filter(merchant_members::merchant_id.eq(merchant_id))
@@ -456,10 +428,6 @@ pub async fn recharge(
         tracing::error!("{}",e.to_string());
         (StatusCode::INTERNAL_SERVER_ERROR,e.to_string())
     })?;
-
-    if num !=1 {
-        tracing::error!("update_member affected num: {}",num);
-    }
     
     let barber=barbers::table
     .filter(barbers::enabled.eq(true))

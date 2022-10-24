@@ -93,28 +93,30 @@ pub async fn update_info(
         return Err((StatusCode::BAD_REQUEST,"新密码和旧密码不匹配".to_string()));
     }
 
+    let mut existed_email_login_info=None;
     if req.email.is_some(){
-        let login_info=login_infos::table
+        existed_email_login_info=login_infos::table
             .filter(login_infos::enabled.eq(true))
             .filter(login_infos::login_info_type.eq("Email"))
             .filter(login_infos::login_info_account.eq(req.email.clone().unwrap()))
             .get_result::<LoginInfo>(&mut *conn)
             .ok();
-        if let Some(login_info)=login_info{
+        if let Some(login_info)=existed_email_login_info.as_ref(){
             if login_info.user_id!=user_id{
                 return Err((StatusCode::BAD_REQUEST,"邮箱已被其他用户使用".to_string())); // TODO 提取单独方法，使用验证码总是可以修改
             }
         }
     }
 
+    let mut existed_cellphone_login_info=None;
     if req.cellphone.is_some(){
-        let login_info=login_infos::table
+        existed_cellphone_login_info=login_infos::table
         .filter(login_infos::enabled.eq(true))
         .filter(login_infos::login_info_type.eq("Cellphone"))
         .filter(login_infos::login_info_account.eq(req.cellphone.clone().unwrap()))
         .get_result::<LoginInfo>(&mut *conn)
         .ok();
-        if let Some(login_info)=login_info{
+        if let Some(login_info)=existed_cellphone_login_info.as_ref(){
             if login_info.user_id!=user_id{
                 return Err((StatusCode::BAD_REQUEST,"手机号已被其他用户使用".to_string())); // TODO 提取单独方法，使用验证码总是可以修改
             }
@@ -155,28 +157,7 @@ pub async fn update_info(
     }
 
     if req.email.is_some(){
-        let email_login_info=login_infos::table
-            .filter(login_infos::enabled.eq(true))
-            .filter(login_infos::login_info_type.eq("Email"))
-            .filter(login_infos::login_info_account.eq(req.email.clone().unwrap()))
-            .get_result::<LoginInfo>(&mut *conn)
-            .ok();
-        if email_login_info.is_some(){
-            diesel::update(
-                login_infos::table
-                .filter(login_infos::user_id.eq(user_id))
-                .filter(login_infos::login_info_type.eq("Email"))
-                .filter(login_infos::enabled.eq(true))
-            )
-            .set((
-                login_infos::login_info_account.eq(req.email.clone().unwrap()),
-                login_infos::update_time.eq(Local::now())
-                ))
-            .execute(&mut *conn).map_err(|e|{
-                tracing::error!("{}",e.to_string());
-                (StatusCode::INTERNAL_SERVER_ERROR,e.to_string())
-            })?;
-        }else {
+        if existed_email_login_info.is_none(){
             let login_info=NewLoginInfo{
                 login_info_id: &Uuid::new_v4(),
                 login_info_account: &req.email.clone().unwrap(),
@@ -196,28 +177,7 @@ pub async fn update_info(
     } 
     
     if req.cellphone.is_some(){
-        let cellphone_login_info=login_infos::table
-            .filter(login_infos::enabled.eq(true))
-            .filter(login_infos::login_info_type.eq("Cellphone"))
-            .filter(login_infos::login_info_account.eq(req.cellphone.clone().unwrap()))
-            .get_result::<LoginInfo>(&mut *conn)
-            .ok();
-        if cellphone_login_info.is_some(){
-            diesel::update(
-                login_infos::table
-                .filter(login_infos::user_id.eq(user_id))
-                .filter(login_infos::login_info_type.eq("Cellphone"))
-                .filter(login_infos::enabled.eq(true))
-            )
-            .set((
-                login_infos::login_info_account.eq(req.cellphone.clone().unwrap()),
-                login_infos::update_time.eq(Local::now())
-                ))
-            .execute(&mut *conn).map_err(|e|{
-                tracing::error!("{}",e.to_string());
-                (StatusCode::INTERNAL_SERVER_ERROR,e.to_string())
-            })?;
-        }else {
+        if existed_cellphone_login_info.is_none(){
             let login_info=NewLoginInfo{
                 login_info_id: &Uuid::new_v4(),
                 login_info_account: &req.cellphone.clone().unwrap(),

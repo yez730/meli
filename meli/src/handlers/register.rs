@@ -3,10 +3,12 @@ use std::env;
 use axum::{extract::State,http::StatusCode, Json};
 use axum_session_authentication_middleware::session::AuthSession;
 use chrono::Local;
+use email_address::EmailAddress;
+use regex::Regex;
 use serde::Deserialize;
 use uuid::Uuid;
 
-use crate::{axum_pg_pool::AxumPgPool, models::{User, NewMerchant, NewUser, NewLoginInfo, NewPasswordLoginProvider, NewBarber, Barber, Merchant, Permission, LoginInfo}, schema::{login_infos, merchants, users, password_login_providers, barbers}, authorization_policy, constant};
+use crate::{axum_pg_pool::AxumPgPool, models::{User, NewMerchant, NewUser, NewLoginInfo, NewPasswordLoginProvider, NewBarber, Barber, Merchant, Permission, LoginInfo}, schema::{login_infos, merchants, users, password_login_providers, barbers}, authorization_policy, constant, regex_constants::CellphoneRegexString};
 use diesel::{
     prelude::*,
     select, 
@@ -19,12 +21,21 @@ use super::barber::BarberResponse;
 pub struct RegisterMerchantRequest{
     pub merchant_name:String,
     pub login_account:String,
-    pub pasword:String,
+    pub password:String,
 }
 
 pub async fn register_merchant(State(pool):State<AxumPgPool>,mut auth: AuthSession<AxumPgPool, AxumPgPool,User>,Json(req):Json<RegisterMerchantRequest>)->Result<Json<BarberResponse>,(StatusCode,String)>{
     let mut conn=pool.pool.get().unwrap();
     
+    let login_info_type;
+    if EmailAddress::is_valid(req.login_account.as_str()){
+        login_info_type="Email";
+    } else if Regex::new(CellphoneRegexString).unwrap().is_match(req.login_account.as_str()){
+        login_info_type="Cellphone";
+    } else {
+        return Err((StatusCode::BAD_REQUEST,"手机号或邮箱格式不正确".to_string()));
+    }
+
     let existed_merchant=select(exists(
             merchants::table
             .filter(merchants::enabled.eq(true))
@@ -55,13 +66,13 @@ pub async fn register_merchant(State(pool):State<AxumPgPool>,mut auth: AuthSessi
          (StatusCode::INTERNAL_SERVER_ERROR,e.to_string())
      })?;
 
-    let mut user:User;
+    let user:User;
 
     let login_info=login_infos::table
-    .filter(login_infos::enabled.eq(true))
-    .filter(login_infos::login_info_account.eq(req.login_account.clone()))
-    .get_result::<LoginInfo>(&mut *conn)
-    .ok();
+        .filter(login_infos::enabled.eq(true))
+        .filter(login_infos::login_info_account.eq(req.login_account.clone()))
+        .get_result::<LoginInfo>(&mut *conn)
+        .ok();
 
     if let Some(login_info)=login_info{
         user=users::table
@@ -93,7 +104,7 @@ pub async fn register_merchant(State(pool):State<AxumPgPool>,mut auth: AuthSessi
         let login_info=NewLoginInfo{
             login_info_id: &Uuid::new_v4(),
             login_info_account: &req.login_account,
-            login_info_type: "Cellphone", //TODO get from account by regex
+            login_info_type, 
             user_id: &user.user_id,
             enabled: true, 
             create_time: Local::now(),
@@ -162,7 +173,7 @@ pub async fn register_merchant(State(pool):State<AxumPgPool>,mut auth: AuthSessi
 
     let salt=env::var("DATABASE_ENCRYPTION_SAULT").unwrap();
     let config = argon2::Config::default();
-    let hash = argon2::hash_encoded(req.pasword.as_bytes(), salt.as_bytes(), &config).unwrap();
+    let hash = argon2::hash_encoded(req.password.as_bytes(), salt.as_bytes(), &config).unwrap();
     let new_password_login_provider=NewPasswordLoginProvider{
         user_id: &user.user_id,
         password_hash: &hash,

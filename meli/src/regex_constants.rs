@@ -1,0 +1,1 @@
+pub const CellphoneRegexString:&str = r"^(13|14|15|16|17|18|19|10)\d{9}$"; // 10 号段为开发号段

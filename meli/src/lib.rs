@@ -5,11 +5,11 @@ pub mod utils;
 pub mod authorization_policy;
 pub mod handlers;
 pub mod constant;
+pub mod regex_constants;
 
 use std::env;
 
 use chrono::Local;
-use diesel::expression::is_aggregate::No;
 use models::*;
 use uuid::Uuid;
 
@@ -246,6 +246,8 @@ mod test{
     #[test]
     #[ignore]
     fn test3(){
+
+        assert!(regex::Regex::new(regex_constants::CellphoneRegexString).unwrap().is_match("14764197590"));
         // let input1=Input3{a:"123".into(),b:Some(NaiveDate::from_ymd(2022, 4, 18))};
         // let json1=serde_json::to_string(&input1).unwrap(); //2022-04-18
         // assert_eq!(json1,"");

@@ -2,12 +2,12 @@ use std::env;
 
 use axum::{http::StatusCode, Json, extract::{Query, Path, State}};
 use axum_session_authentication_middleware::session::AuthSession;
-use chrono::{Local, NaiveDate};
+use chrono::Local;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 use crate::{
     schema::*,
-    models::{Barber, NewUser, NewBarber, NewLoginInfo, NewPasswordLoginProvider, Merchant, LoginInfo, Permission}, authorization_policy,constant
+    models::{Barber, NewUser, NewBarber, NewLoginInfo, Merchant, LoginInfo, Permission,NewPasswordLoginProvider}, authorization_policy,constant
 };
 use diesel::{
     prelude::*, // for .filter
@@ -18,7 +18,6 @@ use crate::{models::User, axum_pg_pool::AxumPgPool};
 use super::{Search, barber::BarberResponse};
 
 pub async fn get_current_merchant(State(pool):State<AxumPgPool>,
-    Query(search):Query<Search>, 
     auth: AuthSession<AxumPgPool, AxumPgPool,User>,
     )->Result<Json<Merchant>,(StatusCode,String)>{
     //检查登录
@@ -30,8 +29,7 @@ pub async fn get_current_merchant(State(pool):State<AxumPgPool>,
 
     let mut conn=pool.pool.get().unwrap();//TODO error
     
-    let merchant_id=serde_json::from_str::<Uuid>(auth.axum_session.lock().unwrap().get_data(constant::MERCHANT_ID))
-        .unwrap();
+    let merchant_id=serde_json::from_str::<Uuid>(auth.axum_session.lock().unwrap().get_data(constant::MERCHANT_ID)).unwrap();
 
     let merchant=merchants::table
         .filter(merchants::enabled.eq(true))
@@ -111,10 +109,19 @@ pub async fn get_barbers(
     Ok(Json(data))
 }
 
+#[derive(Deserialize)]
+pub struct BarberAddRequest{
+    pub cellphone:Option<String>,
+    pub real_name:Option<String>,
+    pub email:Option<String>,
+    pub password:String,
+    pub permission_codes:Vec<String>,
+}
+
 pub async fn add_barber(
     State(pool):State<AxumPgPool>,
     auth: AuthSession<AxumPgPool, AxumPgPool,User>,
-    Json(req): Json<BarberEditRequest>
+    Json(req): Json<BarberAddRequest>
 )->Result<Json<BarberResponse>,(StatusCode,String)>{
     //检查登录
     let _=auth.identity.as_ref().ok_or((StatusCode::UNAUTHORIZED,"no login".to_string()))?;
@@ -131,14 +138,16 @@ pub async fn add_barber(
         return Err((StatusCode::BAD_REQUEST,"手机号码和邮箱不能同时为空".to_string()));
     }
 
+    let mut existed_email_login_info_and_user=None;
     if req.email.is_some(){
-        let email_login_info=login_infos::table
+        existed_email_login_info_and_user=login_infos::table.inner_join(users::table.on(login_infos::user_id.eq(users::user_id)))
+            .filter(users::enabled.eq(true))
             .filter(login_infos::enabled.eq(true))
             .filter(login_infos::login_info_type.eq("Email"))
             .filter(login_infos::login_info_account.eq(req.email.clone().unwrap()))
-            .get_result::<LoginInfo>(&mut *conn)
+            .get_result::<(LoginInfo,User)>(&mut *conn)
             .ok();
-        if let Some(login_info)=email_login_info{
+        if let Some((login_info,_))=existed_email_login_info_and_user.as_ref(){
             let existed_email=select(exists(
                 barbers::table
                 .filter(barbers::enabled.eq(true))
@@ -148,19 +157,21 @@ pub async fn add_barber(
             .get_result(&mut *conn)
             .map_err(|_|(StatusCode::INTERNAL_SERVER_ERROR,"get_result error".to_string()))?;
             if existed_email{
-                return Err((StatusCode::BAD_REQUEST,"该商户已添加该邮箱的理发师".to_string())); //TODO 添加后验证email有效性
+                return Err((StatusCode::BAD_REQUEST,"该商户已添加该邮箱的理发师".to_string())); //TODO 验证email唯一性
             }
         }
     }
 
+    let mut existed_cellphone_login_info_and_user=None;
     if req.cellphone.is_some(){
-        let cellphone_login_info=login_infos::table
-        .filter(login_infos::enabled.eq(true))
-        .filter(login_infos::login_info_type.eq("Cellphone"))
-        .filter(login_infos::login_info_account.eq(req.cellphone.clone().unwrap()))
-        .get_result::<LoginInfo>(&mut *conn)
-        .ok();
-        if let Some(login_info)=cellphone_login_info{
+        existed_cellphone_login_info_and_user=login_infos::table.inner_join(users::table.on(login_infos::user_id.eq(users::user_id)))
+            .filter(users::enabled.eq(true))
+            .filter(login_infos::enabled.eq(true))
+            .filter(login_infos::login_info_type.eq("Cellphone"))
+            .filter(login_infos::login_info_account.eq(req.cellphone.clone().unwrap()))
+            .get_result::<(LoginInfo,User)>(&mut *conn)
+            .ok();
+        if let Some((login_info,_))=existed_cellphone_login_info_and_user.as_ref(){
             let existed_cellphone=select(exists(
                 barbers::table
                 .filter(barbers::enabled.eq(true))
@@ -170,7 +181,7 @@ pub async fn add_barber(
             .get_result(&mut *conn)
             .map_err(|_|(StatusCode::INTERNAL_SERVER_ERROR,"get_result error".to_string()))?;
             if existed_cellphone{
-                return Err((StatusCode::BAD_REQUEST,"该商户已添加该手机号码的理发师".to_string())); //TODO 添加后验证email有效性
+                return Err((StatusCode::BAD_REQUEST,"该商户已添加该手机号码的理发师".to_string())); //TODO 验证email唯一性
             }
         }
     }
@@ -178,22 +189,7 @@ pub async fn add_barber(
     let mut user:Option<User>=None;
 
     if req.email.is_some(){
-        let login_info=login_infos::table
-            .filter(login_infos::enabled.eq(true))
-            .filter(login_infos::login_info_type.eq("Email"))
-            .filter(login_infos::login_info_account.eq(req.email.clone().unwrap()))
-            .get_result::<LoginInfo>(&mut *conn)
-            .ok();
-        if let Some(login_info)=login_info{
-            let res=users::table
-            .filter(users::user_id.eq(login_info.user_id))
-            .filter(users::enabled.eq(true))
-            .get_result(&mut *conn).map_err(|e|{
-                tracing::error!("{}",e.to_string());
-                (StatusCode::INTERNAL_SERVER_ERROR,e.to_string())
-            })?;
-            user=Some(res);
-        } else {
+        if existed_email_login_info_and_user.is_none(){
             if user.is_none(){
                 let user_id=Uuid::new_v4();
                 let new_user=NewUser{
@@ -218,7 +214,7 @@ pub async fn add_barber(
             let login_info=NewLoginInfo{
                 login_info_id: &Uuid::new_v4(),
                 login_info_account: &req.email.clone().unwrap(),
-                login_info_type: "Email", //TODO get enum variant value string
+                login_info_type: "Email", 
                 user_id: &user.clone().unwrap().user_id,
                 enabled: true, 
                 create_time: Local::now(),
@@ -231,26 +227,10 @@ pub async fn add_barber(
                 (StatusCode::INTERNAL_SERVER_ERROR,e.to_string())
             })?;
         }
-    } 
+    }
 
     if req.cellphone.is_some(){
-        let login_info=login_infos::table
-            .filter(login_infos::enabled.eq(true))
-            .filter(login_infos::login_info_type.eq("Cellphone"))
-            .filter(login_infos::login_info_account.eq(req.cellphone.clone().unwrap()))
-            .get_result::<LoginInfo>(&mut *conn)
-            .ok();
-        if let Some(login_info)=login_info{
-            let res=users::table
-            .filter(users::user_id.eq(login_info.user_id))
-            .filter(users::enabled.eq(true))
-            .get_result(&mut *conn).map_err(|e|{
-                tracing::error!("{}",e.to_string());
-                (StatusCode::INTERNAL_SERVER_ERROR,e.to_string())
-            })?;
-            user=Some(res);
-            
-        } else {
+        if existed_cellphone_login_info_and_user.is_none(){
             if user.is_none(){
                 let user_id=Uuid::new_v4();
                 let new_user=NewUser{
@@ -275,7 +255,7 @@ pub async fn add_barber(
             let login_info=NewLoginInfo{
                 login_info_id: &Uuid::new_v4(),
                 login_info_account: &req.cellphone.clone().unwrap(),
-                login_info_type: "Cellphone", //TODO get enum variant value string
+                login_info_type: "Cellphone",
                 user_id: &user.clone().unwrap().user_id,
                 enabled: true, 
                 create_time: Local::now(),
@@ -303,13 +283,11 @@ pub async fn add_barber(
         data: None,
     };
     let barber=diesel::insert_into(barbers::table)
-    .values(&new_barber)
-    .get_result(&mut *conn).map_err(|e|{
-        tracing::error!("{}",e.to_string());
-        (StatusCode::INTERNAL_SERVER_ERROR,e.to_string())
-    })?;
-
-    // TODO 有密码需添加password_login_providers
+        .values(&new_barber)
+        .get_result(&mut *conn).map_err(|e|{
+            tracing::error!("{}",e.to_string());
+            (StatusCode::INTERNAL_SERVER_ERROR,e.to_string())
+        })?;
 
     // add permissions
     for &permission_code in authorization_policy::DEFAULT_PERMISSIONS_OF_MERCHANT_BARBER{
@@ -345,13 +323,31 @@ pub async fn add_barber(
         }
     }
 
+    let salt=env::var("DATABASE_ENCRYPTION_SAULT").unwrap();
+    let config = argon2::Config::default();
+    let hash = argon2::hash_encoded(req.password.as_bytes(), salt.as_bytes(), &config).unwrap();
+    let new_password_login_provider=NewPasswordLoginProvider{ //TODO 一个
+        user_id: &user.clone().unwrap().user_id,
+        password_hash: &hash,
+        enabled:true,
+        create_time: Local::now(),
+        update_time: Local::now(),
+        data:None
+    };
+    diesel::insert_into(password_login_providers::table)
+        .values(&new_password_login_provider)
+        .execute(&mut *conn).map_err(|e|{
+            tracing::error!("{}",e.to_string());
+            (StatusCode::INTERNAL_SERVER_ERROR,e.to_string())
+        })?;
+
     let merchant=merchants::table
-    .filter(merchants::enabled.eq(true))
-    .filter(merchants::merchant_id.eq(merchant_id))
-    .get_result(&mut *conn).map_err(|e|{
-        tracing::error!("{}",e.to_string());
-        (StatusCode::INTERNAL_SERVER_ERROR,e.to_string())
-    })?;
+        .filter(merchants::enabled.eq(true))
+        .filter(merchants::merchant_id.eq(merchant_id))
+        .get_result(&mut *conn).map_err(|e|{
+            tracing::error!("{}",e.to_string());
+            (StatusCode::INTERNAL_SERVER_ERROR,e.to_string())
+        })?;
 
     let barber_response=BarberResponse{barber,merchant};
 
@@ -372,7 +368,7 @@ pub async fn delete_barber(
     
     let mut conn=pool.pool.get().unwrap();//TODO error
 
-    let count=diesel::update(
+    diesel::update(
         barbers::table
         .filter(barbers::barber_id.eq(barber_id))
         .filter(barbers::enabled.eq(true))
@@ -386,9 +382,7 @@ pub async fn delete_barber(
         (StatusCode::INTERNAL_SERVER_ERROR,e.to_string())
     })?;
 
-    if count!=1 {
-        return Err((StatusCode::NOT_FOUND,"data not exists".to_string()));
-    }
+    //TODO 删除perssmission/login_info/user/password 
 
     Ok(())
 }
@@ -432,28 +426,30 @@ pub async fn update_barber(
             (StatusCode::INTERNAL_SERVER_ERROR,e.to_string())
         })?;
 
+    let mut email_login_info=None;
     if req.email.is_some(){
-        let email_login_info=login_infos::table
+        email_login_info=login_infos::table
             .filter(login_infos::enabled.eq(true))
             .filter(login_infos::login_info_type.eq("Email"))
             .filter(login_infos::login_info_account.eq(req.email.clone().unwrap()))
             .get_result::<LoginInfo>(&mut *conn)
             .ok();
-        if let Some(login_info)=email_login_info{
+        if let Some(login_info)=email_login_info.as_ref(){
             if login_info.user_id!=barber.user_id{
                 return Err((StatusCode::BAD_REQUEST,"该邮箱已被其他用户使用".to_string())); //TODO 添加后验证email有效性
             }
         }
     }
 
+    let mut cellphone_login_info=None;
     if req.cellphone.is_some(){
-        let cellphone_login_info=login_infos::table
+        cellphone_login_info=login_infos::table
         .filter(login_infos::enabled.eq(true))
         .filter(login_infos::login_info_type.eq("Cellphone"))
         .filter(login_infos::login_info_account.eq(req.cellphone.clone().unwrap()))
         .get_result::<LoginInfo>(&mut *conn)
         .ok();
-        if let Some(login_info)=cellphone_login_info{
+        if let Some(login_info)=cellphone_login_info.as_ref(){
             if login_info.user_id!=barber.user_id{
                 return Err((StatusCode::BAD_REQUEST,"该手机号已被其他用户使用".to_string())); //TODO 添加后验证email有效性
             }
@@ -461,13 +457,7 @@ pub async fn update_barber(
     }
 
     if req.email.is_some(){
-        let login_info=login_infos::table
-            .filter(login_infos::enabled.eq(true))
-            .filter(login_infos::login_info_type.eq("Email"))
-            .filter(login_infos::login_info_account.eq(req.email.clone().unwrap()))
-            .get_result::<LoginInfo>(&mut *conn)
-            .ok();
-        if login_info.is_none(){
+        if email_login_info.is_none(){
             let login_info=NewLoginInfo{
                 login_info_id: &Uuid::new_v4(),
                 login_info_account: &req.email.clone().unwrap(),
@@ -487,13 +477,7 @@ pub async fn update_barber(
     } 
 
     if req.cellphone.is_some(){
-        let login_info=login_infos::table
-            .filter(login_infos::enabled.eq(true))
-            .filter(login_infos::login_info_type.eq("Cellphone"))
-            .filter(login_infos::login_info_account.eq(req.cellphone.clone().unwrap()))
-            .get_result::<LoginInfo>(&mut *conn)
-            .ok();
-        if login_info.is_none(){
+        if cellphone_login_info.is_none(){
             let login_info=NewLoginInfo{
                 login_info_id: &Uuid::new_v4(),
                 login_info_account: &req.cellphone.clone().unwrap(),
@@ -518,11 +502,11 @@ pub async fn update_barber(
         .filter(barbers::enabled.eq(true))
     )
     .set((
-            barbers::cellphone.eq(req.cellphone.unwrap()),
-            barbers::real_name.eq(req.real_name),
-            barbers::email.eq(req.email),
-            barbers::update_time.eq(Local::now())
-        ))
+        barbers::cellphone.eq(req.cellphone.unwrap()),
+        barbers::real_name.eq(req.real_name),
+        barbers::email.eq(req.email),
+        barbers::update_time.eq(Local::now())
+    ))
     .execute(&mut *conn).map_err(|e|{
         tracing::error!("{}",e.to_string());
         (StatusCode::INTERNAL_SERVER_ERROR,e.to_string())
