@@ -14,10 +14,10 @@ CREATE TABLE barbers (
     data TEXT NULL
 );
 
-CREATE UNIQUE INDEX barbers_user_id_key ON barbers
+CREATE INDEX barbers_user_id_idx ON barbers
 (user_id);
 
-CREATE UNIQUE INDEX barbers_barber_id_key ON barbers
+CREATE INDEX barbers_barber_id_idx ON barbers
 (barber_id);
 
 CREATE INDEX barbers_merchant_id_idx ON barbers

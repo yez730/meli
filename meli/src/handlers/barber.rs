@@ -1,285 +1,273 @@
-use axum::{http::StatusCode, Json, extract::{Query, Path, State}};
+use std::env;
+
+use axum::{http::StatusCode, Json, extract::State};
 use axum_session_authentication_middleware::session::AuthSession;
-use chrono::{Local, NaiveDate};
+use chrono::Local;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 use crate::{
     schema::*,
-    models::{Barber, NewUser, NewBarber, NewLoginInfo, NewPasswordLoginProvider, Merchant}, authorization_policy
+    models::{Barber,Merchant, LoginInfo, NewLoginInfo}, authorization_policy
 };
 use diesel::{
     prelude::*, // for .filter
     select, 
     dsl::exists,
-}; 
+};
+use crate::constant; 
 use crate::{models::User, axum_pg_pool::AxumPgPool};
-use super::Search;
-
-#[derive(Deserialize)]
-pub struct BarberRequest{
-    pub cellphone:String,
-    pub real_name:Option<String>,
-    pub email:Option<String>,
-}
 
 #[derive(Serialize)]
-pub struct BarberResonse{
+pub struct BarberResponse{
     #[serde(flatten)]
     pub barber :Barber,
     pub merchant:Merchant
 }
 
-pub async fn get_barbers(
+pub async fn get_current_barber(
     State(pool):State<AxumPgPool>,
-    Query(search):Query<Search>, 
     auth: AuthSession<AxumPgPool, AxumPgPool,User>,
-)->Result<Json<Vec<BarberResonse>>,(StatusCode,String)>{
+)->Result<Json<BarberResponse>,(StatusCode,String)>{
     //检查登录
     let _=auth.identity.as_ref().ok_or((StatusCode::UNAUTHORIZED,"no login".to_string()))?;
 
     //检查权限
-    auth.require_permissions(vec![authorization_policy::MERCHANT_ADMINISTRATOR])
+    auth.require_permissions(vec![authorization_policy::BARBER_BASE])
         .map_err(|_|(StatusCode::INTERNAL_SERVER_ERROR,"no permission".to_string()))?;
+
+    let mut conn=pool.pool.get().unwrap();//TODO error  
     
+    let merchant_id=serde_json::from_str::<Uuid>(auth.axum_session.lock().unwrap().get_data(constant::MERCHANT_ID)).unwrap();
+    let user_id=auth.identity.unwrap().user_id;
+
+    let barber=barbers::table
+        .inner_join(merchants::table.on(barbers::merchant_id.eq(merchants::merchant_id)))
+        .filter(barbers::enabled.eq(true))
+        .filter(barbers::merchant_id.eq(merchant_id))
+        .filter(barbers::user_id.eq(user_id))
+        .filter(merchants::enabled.eq(true))
+        .get_result::<(Barber,Merchant)>(&mut *conn)
+        .map(|bm|BarberResponse{ barber:bm.0,merchant:bm.1})
+        .map_err(|e|(StatusCode::INTERNAL_SERVER_ERROR,e.to_string()))?;
+        
+    Ok(Json(barber))
+}
+
+#[derive(Deserialize)]
+pub struct UpdateInfoRequest{
+    pub cellphone:Option<String>,
+    pub real_name:Option<String>,
+    pub email:Option<String>,
+
+    #[serde(rename="newPassword")]
+    pub new_password:Option<String>,
+
+    pub old_password:Option<String>,
+
+    #[serde(rename="merchantName")]
+    pub merchant_name:String,
+    #[serde(rename="merchantAdderss")]
+    pub merchant_address:Option<String>,
+    #[serde(rename="merchantRemark")]
+    pub merchant_remark:Option<String>,
+}
+
+pub async fn update_info(
+    State(pool):State<AxumPgPool>,
+    auth: AuthSession<AxumPgPool, AxumPgPool,User>,
+    Json(req): Json<UpdateInfoRequest>
+)->Result<(),(StatusCode,String)>{
+    //检查登录
+    let _=auth.identity.as_ref().ok_or((StatusCode::UNAUTHORIZED,"no login".to_string()))?;
+
+    //检查权限
+    auth.require_permissions(vec![authorization_policy::BARBER_BASE])
+        .map_err(|_|(StatusCode::INTERNAL_SERVER_ERROR,"no permission".to_string()))?;
+
     let mut conn=pool.pool.get().unwrap();//TODO error
 
-    let barber=serde_json::from_str::<Option<Barber>>(auth.axum_session.lock().unwrap().get_data("barber"))
-	    .unwrap().unwrap();
+    let merchant_id=serde_json::from_str::<Uuid>(auth.axum_session.lock().unwrap().get_data(constant::MERCHANT_ID)).unwrap();
+    let user_id=auth.identity.unwrap().user_id;
 
-    let mut query=barbers::dsl::barbers
-    .inner_join(merchants::table.on(barbers::merchant_id.eq(merchants::merchant_id)))
-    .filter(merchants::dsl::enabled.eq(true))
-    .filter(barbers::dsl::enabled.eq(true))
-    .filter(barbers::dsl::merchant_id.eq(barber.merchant_id))
-    .into_boxed();
+    if req.old_password.is_some() && req.new_password.is_none(){
+        return Err((StatusCode::BAD_REQUEST,"新密码和旧密码不匹配".to_string()));
+    }
 
-    if let Some(key)=search.key.as_ref(){
-        if key.len()>0 {
-            query=query.filter(barbers::dsl::cellphone.ilike(format!("%{key}%")).or(barbers::dsl::real_name.ilike(format!("%{key}%"))));   
+    if req.email.is_some(){
+        let login_info=login_infos::table
+            .filter(login_infos::enabled.eq(true))
+            .filter(login_infos::login_info_type.eq("Email"))
+            .filter(login_infos::login_info_account.eq(req.email.clone().unwrap()))
+            .get_result::<LoginInfo>(&mut *conn)
+            .ok();
+        if let Some(login_info)=login_info{
+            if login_info.user_id!=user_id{
+                return Err((StatusCode::BAD_REQUEST,"邮箱已被其他用户使用".to_string())); // TODO 提取单独方法，使用验证码总是可以修改
+            }
         }
     }
 
-    let data=query
-        .order(barbers::dsl::create_time.desc())
-        .get_results::<(Barber,Merchant)>(&mut *conn)
-        .map(|bm|bm.into_iter().map(|(b,m)| BarberResonse { barber: b, merchant: m }).collect())
-        
-        .map_err(|e|(StatusCode::INTERNAL_SERVER_ERROR,e.to_string()))?;
-    
-    Ok(Json(data))
-}
-
-pub async fn add_barber(
-    State(pool):State<AxumPgPool>,
-    auth: AuthSession<AxumPgPool, AxumPgPool,User>,
-    Json(req): Json<BarberRequest>
-)->Result<Json<BarberResonse>,(StatusCode,String)>{
-    //检查登录
-    let _=auth.identity.as_ref().ok_or((StatusCode::UNAUTHORIZED,"no login".to_string()))?;
-
-    //检查权限
-    auth.require_permissions(vec![authorization_policy::MERCHANT_ADMINISTRATOR])
-        .map_err(|_|(StatusCode::INTERNAL_SERVER_ERROR,"no permission".to_string()))?;
-    
-    let mut conn=pool.pool.get().unwrap();//TODO error
-    
-    let barber=serde_json::from_str::<Option<Barber>>(auth.axum_session.lock().unwrap().get_data("barber"))
-	    .unwrap().unwrap();
-
-    //添加 TODO insert data with enabled settting false, finally set to true.
-    let existed=select(exists(barbers::dsl::barbers
-        .filter(barbers::dsl::enabled.eq(true))
-        .filter(barbers::dsl::cellphone.eq(&req.cellphone))))
-        .get_result::<bool>(&mut *conn)
+    if req.cellphone.is_some(){
+        let login_info=login_infos::table
+        .filter(login_infos::enabled.eq(true))
+        .filter(login_infos::login_info_type.eq("Cellphone"))
+        .filter(login_infos::login_info_account.eq(req.cellphone.clone().unwrap()))
+        .get_result::<LoginInfo>(&mut *conn)
         .ok();
+        if let Some(login_info)=login_info{
+            if login_info.user_id!=user_id{
+                return Err((StatusCode::BAD_REQUEST,"手机号已被其他用户使用".to_string())); // TODO 提取单独方法，使用验证码总是可以修改
+            }
+        }
+    }
 
-    if let Some(true)=existed{
-        return Err((StatusCode::INTERNAL_SERVER_ERROR,"已存在该用户".to_string()));
-    } else {
-        // 1. add user
-        let user_id=Uuid::new_v4();
-        let new_user=NewUser{
-            user_id: &user_id,
-            description: "test user",
-            permissions:&serde_json::to_string(authorization_policy::DEFAULT_PERMISSIONS_OF_MERCHANT_BARBER).unwrap(),
-            roles:"[]",
-            enabled:true,
-            create_time: Local::now(),
-            update_time: Local::now(),
-            data: None,
-        };
-        diesel::insert_into(users::table)
-        .values(&new_user)
-        .execute(&mut *conn).map_err(|e|{
-            tracing::error!("{}",e.to_string());
-            (StatusCode::INTERNAL_SERVER_ERROR,e.to_string())
-        })?;
-
-        // 2. add login info / login info provider  //TODO cellphone login info provider
-        // 2.1
-        let login_info=NewLoginInfo{
-            login_info_id: &Uuid::new_v4(),
-            login_info_barber: &req.cellphone,
-            login_info_type: "Username", //TODO get enum variant value string
-            user_id: &user_id,
-            enabled: true, // TODO false
-            create_time: Local::now(),
-            update_time: Local::now(),
-        };
-        diesel::insert_into(login_infos::table)
-        .values(&login_info)
-        .execute(&mut *conn).map_err(|e|{
-            tracing::error!("{}",e.to_string());
-            (StatusCode::INTERNAL_SERVER_ERROR,e.to_string())
-        })?;
-        // 2.2
-        let password = b"123456";
-        let salt = b"randomsalt";
+    if req.old_password.is_some(){
+        let salt = env::var("DATABASE_ENCRYPTION_SAULT").unwrap();
         let config = argon2::Config::default();
-        let hash = argon2::hash_encoded(password, salt, &config).unwrap();
-        let new_password_login_provider=NewPasswordLoginProvider{
-            user_id: &user_id,
-            password_hash: &hash,
-            enabled:true,
-            create_time: Local::now(),
-            update_time: Local::now(),
-            data:None
-        };
-        diesel::insert_into(password_login_providers::table)
-        .values(&new_password_login_provider)
+
+        let old_hash = argon2::hash_encoded(req.old_password.unwrap().as_bytes(), salt.as_bytes(), &config).unwrap();
+        let is_old_password_match:bool=select(exists(
+                password_login_providers::table
+                .filter(password_login_providers::enabled.eq(true))
+                .filter(password_login_providers::user_id.eq(user_id))
+                .filter(password_login_providers::password_hash.eq(old_hash))
+            ))
+            .get_result(&mut *conn)
+            .map_err(|_|(StatusCode::INTERNAL_SERVER_ERROR,"get_result error".to_string()))?;
+        if !is_old_password_match{
+            return Err((StatusCode::BAD_REQUEST,"旧密码不正确".to_string()));
+        }
+
+        let new_hash = argon2::hash_encoded(req.new_password.unwrap().as_bytes(), salt.as_bytes(), &config).unwrap();
+        diesel::update(
+            password_login_providers::table
+            .filter(password_login_providers::user_id.eq(user_id))
+            .filter(password_login_providers::enabled.eq(true))
+        )
+        .set((
+                password_login_providers::password_hash.eq(new_hash),
+                password_login_providers::update_time.eq(Local::now())
+            ))
         .execute(&mut *conn).map_err(|e|{
             tracing::error!("{}",e.to_string());
             (StatusCode::INTERNAL_SERVER_ERROR,e.to_string())
         })?;
-
-        // 3. add barber
-        let new_barber=NewBarber{
-            user_id:  &user_id,
-            barber_id: &Uuid::new_v4(),
-            merchant_id:&barber.merchant_id,
-            email:req.email.as_deref(),
-            cellphone:&req.cellphone,
-            real_name:req.real_name.as_deref(),
-            enabled:true,
-            create_time: Local::now(),
-            update_time: Local::now(),
-            data: None,
-        };
-        diesel::insert_into(barbers::table)
-        .values(&new_barber)
-        .execute(&mut *conn).map_err(|e|{
-            tracing::error!("{}",e.to_string());
-            (StatusCode::INTERNAL_SERVER_ERROR,e.to_string())
-        })?;
-
-        let barber=barbers::dsl::barbers
-            .inner_join(merchants::table.on(barbers::merchant_id.eq(merchants::merchant_id)))
-            .filter(merchants::dsl::enabled.eq(true))
-            .filter(barbers::dsl::enabled.eq(true))
-            .filter(barbers::dsl::barber_id.eq(new_barber.barber_id))
-            .get_result::<(Barber,Merchant)>(&mut *conn)
-            .map(|bm|BarberResonse{ barber:bm.0,merchant:bm.1})
-            .map_err(|e|(StatusCode::INTERNAL_SERVER_ERROR,e.to_string()))?;
-        
-        Ok(Json(barber))
     }
-}
 
-pub async fn delete_barber(
-    State(pool):State<AxumPgPool>,
-    Path(barber_id):Path<Uuid>, 
-    auth: AuthSession<AxumPgPool, AxumPgPool,User>,
-)->Result<(),(StatusCode,String)>{
-    //检查登录
-    let _=auth.identity.as_ref().ok_or((StatusCode::UNAUTHORIZED,"no login".to_string()))?;
-
-    //检查权限
-    auth.require_permissions(vec![authorization_policy::MERCHANT_ADMINISTRATOR])
-        .map_err(|_|(StatusCode::INTERNAL_SERVER_ERROR,"no permission".to_string()))?;
+    if req.email.is_some(){
+        let email_login_info=login_infos::table
+            .filter(login_infos::enabled.eq(true))
+            .filter(login_infos::login_info_type.eq("Email"))
+            .filter(login_infos::login_info_account.eq(req.email.clone().unwrap()))
+            .get_result::<LoginInfo>(&mut *conn)
+            .ok();
+        if email_login_info.is_some(){
+            diesel::update(
+                login_infos::table
+                .filter(login_infos::user_id.eq(user_id))
+                .filter(login_infos::login_info_type.eq("Email"))
+                .filter(login_infos::enabled.eq(true))
+            )
+            .set((
+                login_infos::login_info_account.eq(req.email.clone().unwrap()),
+                login_infos::update_time.eq(Local::now())
+                ))
+            .execute(&mut *conn).map_err(|e|{
+                tracing::error!("{}",e.to_string());
+                (StatusCode::INTERNAL_SERVER_ERROR,e.to_string())
+            })?;
+        }else {
+            let login_info=NewLoginInfo{
+                login_info_id: &Uuid::new_v4(),
+                login_info_account: &req.email.clone().unwrap(),
+                login_info_type: "Email",
+                user_id: &user_id,
+                enabled: true, 
+                create_time: Local::now(),
+                update_time: Local::now(),
+            };
+            diesel::insert_into(login_infos::table)
+            .values(&login_info)
+            .execute(&mut *conn).map_err(|e|{
+                tracing::error!("{}",e.to_string());
+                (StatusCode::INTERNAL_SERVER_ERROR,e.to_string())
+            })?;
+        }
+    } 
     
-    let mut conn=pool.pool.get().unwrap();//TODO error
-
-    let count=diesel::update(
-        barbers::dsl::barbers
-        .filter(barbers::dsl::barber_id.eq(barber_id))
-        .filter(barbers::dsl::enabled.eq(true))
-    )
-    .set((
-        barbers::dsl::enabled.eq(false),
-        barbers::dsl::update_time.eq(Local::now())
-    ))
-    .execute(&mut *conn).map_err(|e|{
-        tracing::error!("{}",e.to_string());
-        (StatusCode::INTERNAL_SERVER_ERROR,e.to_string())
-    })?;
-
-    if count!=1 {
-        return Err((StatusCode::NOT_FOUND,"data not exists".to_string()));
+    if req.cellphone.is_some(){
+        let cellphone_login_info=login_infos::table
+            .filter(login_infos::enabled.eq(true))
+            .filter(login_infos::login_info_type.eq("Cellphone"))
+            .filter(login_infos::login_info_account.eq(req.cellphone.clone().unwrap()))
+            .get_result::<LoginInfo>(&mut *conn)
+            .ok();
+        if cellphone_login_info.is_some(){
+            diesel::update(
+                login_infos::table
+                .filter(login_infos::user_id.eq(user_id))
+                .filter(login_infos::login_info_type.eq("Cellphone"))
+                .filter(login_infos::enabled.eq(true))
+            )
+            .set((
+                login_infos::login_info_account.eq(req.cellphone.clone().unwrap()),
+                login_infos::update_time.eq(Local::now())
+                ))
+            .execute(&mut *conn).map_err(|e|{
+                tracing::error!("{}",e.to_string());
+                (StatusCode::INTERNAL_SERVER_ERROR,e.to_string())
+            })?;
+        }else {
+            let login_info=NewLoginInfo{
+                login_info_id: &Uuid::new_v4(),
+                login_info_account: &req.cellphone.clone().unwrap(),
+                login_info_type: "Cellphone",
+                user_id: &user_id,
+                enabled: true, 
+                create_time: Local::now(),
+                update_time: Local::now(),
+            };
+            diesel::insert_into(login_infos::table)
+            .values(&login_info)
+            .execute(&mut *conn).map_err(|e|{
+                tracing::error!("{}",e.to_string());
+                (StatusCode::INTERNAL_SERVER_ERROR,e.to_string())
+            })?;
+        }
     }
-
-    Ok(())
-}
-
-pub async fn update_barber(
-    State(pool):State<AxumPgPool>,
-    Path(barber_id):Path<Uuid>, 
-    auth: AuthSession<AxumPgPool, AxumPgPool,User>,
-    Json(req): Json<BarberRequest>
-)->Result<(),(StatusCode,String)>{
-    //检查登录
-    let _=auth.identity.as_ref().ok_or((StatusCode::UNAUTHORIZED,"no login".to_string()))?;
-
-    //检查权限
-    auth.require_permissions(vec![authorization_policy::MERCHANT_ADMINISTRATOR])
-        .map_err(|_|(StatusCode::INTERNAL_SERVER_ERROR,"no permission".to_string()))?;
-   
-    let mut conn=pool.pool.get().unwrap();//TODO error
-
-    let num=diesel::update(
-        barbers::dsl::barbers
-        .filter(barbers::dsl::barber_id.eq(barber_id))
-        .filter(barbers::dsl::enabled.eq(true))
+      
+    diesel::update(
+        barbers::table
+        .filter(barbers::user_id.eq(user_id))
+        .filter(barbers::merchant_id.eq(merchant_id))
+        .filter(barbers::enabled.eq(true))
     )
     .set((
-            barbers::dsl::cellphone.eq(req.cellphone),
-            barbers::dsl::real_name.eq(req.real_name),
-            barbers::dsl::email.eq(req.email),
-            barbers::dsl::update_time.eq(Local::now())
+            barbers::cellphone.eq(req.cellphone.unwrap()), //TODO nullale
+            barbers::real_name.eq(req.real_name), 
+            barbers::email.eq(req.email),
+            barbers::update_time.eq(Local::now())
         ))
     .execute(&mut *conn).map_err(|e|{
         tracing::error!("{}",e.to_string());
         (StatusCode::INTERNAL_SERVER_ERROR,e.to_string())
     })?;
 
-    if num !=1 {
-        tracing::error!("update_barber affected num: {}",num);
-    }
+    diesel::update(
+        merchants::table
+        .filter(merchants::merchant_id.eq(merchant_id))
+        .filter(merchants::enabled.eq(true))
+    )
+    .set((
+            merchants::merchant_name.eq(req.merchant_name),
+            merchants::address.eq(req.merchant_address), 
+            merchants::remark.eq(req.merchant_remark),
+            merchants::update_time.eq(Local::now())
+        ))
+    .execute(&mut *conn).map_err(|e|{
+        tracing::error!("{}",e.to_string());
+        (StatusCode::INTERNAL_SERVER_ERROR,e.to_string())
+    })?;
     
     Ok(())
-}
-
-pub async fn get_barber(
-    State(pool):State<AxumPgPool>,
-    Path(barber_id):Path<Uuid>, 
-    auth: AuthSession<AxumPgPool, AxumPgPool,User>,
-)->Result<Json<BarberResonse>,(StatusCode,String)>{
-    //检查登录
-    let _=auth.identity.as_ref().ok_or((StatusCode::UNAUTHORIZED,"no login".to_string()))?;
-
-    //检查权限
-    auth.require_permissions(vec![authorization_policy::MERCHANT_ADMINISTRATOR])
-        .map_err(|_|(StatusCode::INTERNAL_SERVER_ERROR,"no permission".to_string()))?;
-
-    let mut conn=pool.pool.get().unwrap();//TODO error  
-    
-    let barber=barbers::dsl::barbers
-        .inner_join(merchants::table.on(barbers::merchant_id.eq(merchants::merchant_id)))
-        .filter(merchants::dsl::enabled.eq(true))
-        .filter(barbers::dsl::enabled.eq(true))
-        .filter(barbers::dsl::barber_id.eq(barber_id))
-        .get_result::<(Barber,Merchant)>(&mut *conn)
-        .map(|bm|BarberResonse{ barber:bm.0,merchant:bm.1})
-        .map_err(|e|(StatusCode::INTERNAL_SERVER_ERROR,e.to_string()))?;
-        
-    Ok(Json(barber))
 }

@@ -3,11 +3,13 @@ pub mod barber;
 pub mod member;
 pub mod appointment;
 pub mod service_type;
+pub mod register;
+pub mod login;
+pub mod statistic;
+pub mod merchant;
 
 use serde::{Serialize, Deserialize};
 use uuid::Uuid;
-
-use crate::models::{Barber, Merchant};
 
 #[derive(Serialize)]
 pub struct PaginatedListResponse<T:Serialize> {

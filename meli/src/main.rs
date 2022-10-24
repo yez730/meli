@@ -7,16 +7,24 @@ use tower_http::{trace::TraceLayer};
 use tower_http::cors::CorsLayer;
 use tracing_subscriber::{layer::SubscriberExt,util::SubscriberInitExt};
 
+use dotenvy::dotenv;
+
 use meli_backend::{ axum_pg_pool::AxumPgPool, models::User, utils::get_connection_pool, handlers::*};
 
+use appointment::*;
 use barber::*;
 use identity::*;
+use login::*;
 use member::*;
+use merchant::*;
+use register::*;
 use service_type::*;
-use appointment::*;
+use statistic::*;
 
 #[tokio::main]
 async fn main(){
+    dotenv().expect("Cannot find .env file");
+    
     tracing_subscriber::registry()
         .with(tracing_subscriber::EnvFilter::new(
             std::env::var("RUST_LOG").unwrap_or("meli_backend=trace,axum_session_authentication_middleware=trace,axum_session_middleware=trace".into()),
@@ -29,22 +37,32 @@ async fn main(){
     };
 
     let app=Router::with_state(axum_pg_pool.clone())
-        .route("/login", post(login_by_username))
-        .route("/logout", get(logout))
-        .route("/identity", get(get_current_identity))
+        .route("/login", post(barber_login_by_password))
+        .route("/identity/logout", get(logout))
+        .route("/identity/current", get(get_current_identity))
+
+        .route("/register/merchant", get(register_merchant))
         
+        .route("/barber", get(get_current_barber).post(update_info))
+
+        .route("/merchant/all_merchants_by_account", get(get_merchants_by_login_account))
+
+        .route("/merchant/current", get(get_current_merchant))
+        .route("/merchant/barbers", get(get_barbers).post(add_barber))
+        .route("/merchant/barber/:barber_id", get(get_barber).post(update_barber).delete(delete_barber))
+
         .route("/members", get(get_members).post(add_member))
         .route("/member/:member_id", get(get_member).post(update_member).delete(delete_member))
         .route("/member/recharge/:member_id", post(recharge))
-        
-        .route("/barbers", get(get_barbers).post(add_barber))
-        .route("/barber/:barber_id", get(get_barber).post(update_barber).delete(delete_barber))
 
         .route("/service_types", get(get_service_types).post(add_service_type))
         .route("/service_type/:service_type_id", get(get_service_type).post(update_service_type).delete(delete_service_type))
         
         .route("/appointments",get(get_appointments).post(add_appointment))
         .route("/appointment/:appointment_id",get(get_appointment))
+
+        .route("/statistic/orders",get(get_orders))
+        .route("/statistic/recharge_records",get(get_recharge_records))
 
         .layer(CorsLayer::new()
             .allow_origin("http://127.0.0.1:8080".parse::<HeaderValue>().unwrap(),)

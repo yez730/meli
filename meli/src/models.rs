@@ -29,20 +29,20 @@ impl Authentication<User, AxumPgPool> for User{
     fn load_identity(user_id:Uuid,pool:AxumPgPool) -> auth_user::Identity{
         let mut conn=pool.pool.get().unwrap();//TODO error
 
-        let user=users::dsl::users
-            .filter(users::dsl::user_id.eq(user_id))
-            .filter(users::dsl::enabled.eq(true))
+        let user=users::table
+            .filter(users::user_id.eq(user_id))
+            .filter(users::enabled.eq(true))
             .get_result::<User>(&mut *conn)
             .unwrap();
 
-        let permissions=permissions::dsl::permissions
-            .filter(permissions::dsl::permission_id.eq_any(serde_json::from_str::<Vec<Uuid>>(&user.permissions).unwrap())) 
-            .filter(permissions::dsl::enabled.eq(true))
+        let permissions=permissions::table
+            .filter(permissions::permission_id.eq_any(serde_json::from_str::<Vec<Uuid>>(&user.permissions).unwrap())) 
+            .filter(permissions::enabled.eq(true))
             .get_results::<Permission>(&mut *conn)
             .unwrap();
-        let roles=roles::dsl::roles
-            .filter(roles::dsl::role_id.eq_any(serde_json::from_str::<Vec<Uuid>>(&user.roles).unwrap())) 
-            .filter(roles::dsl::enabled.eq(true))
+        let roles=roles::table
+            .filter(roles::role_id.eq_any(serde_json::from_str::<Vec<Uuid>>(&user.roles).unwrap())) 
+            .filter(roles::enabled.eq(true))
             .get_results::<Role>(&mut *conn)
             .unwrap();
 
@@ -174,7 +174,7 @@ pub struct Member{
 
     #[serde(skip)]
     pub enabled:bool,
-    
+
     #[serde(with = "my_date_format")]
     pub create_time: chrono::DateTime<Local>,
     #[serde(with = "my_date_format")]
@@ -182,6 +182,8 @@ pub struct Member{
 
     #[serde(skip)]
     pub data: Option<String>,
+        
+    pub remark:Option<String>,
 }
 
 #[derive(Insertable)]
@@ -197,6 +199,8 @@ pub struct NewMember<'a>{
     pub create_time: chrono::DateTime<Local>,
     pub update_time: chrono::DateTime<Local>,
     pub data: Option<&'a str>,
+    
+    pub remark:Option<&'a str>,
 }
 
 #[derive(Queryable,Serialize)]
@@ -290,6 +294,9 @@ pub struct Merchant{
 
     #[serde(skip)]
     pub data: Option<String>,
+
+    pub address:Option<String>,
+    pub remark:Option<String>,
 }
 
 #[derive(Insertable)]
@@ -303,13 +310,16 @@ pub struct NewMerchant<'a>{
     pub create_time: chrono::DateTime<Local>,
     pub update_time: chrono::DateTime<Local>,
     pub data: Option<&'a str>,
+
+    pub address:Option<&'a str>,
+    pub remark:Option<&'a str>,
 }
 
 #[derive(Queryable,Clone)]
 pub struct LoginInfo{
     pub id: i64,
     pub login_info_id: Uuid,
-    pub login_info_barber: String,
+    pub login_info_account: String,
     pub login_info_type: String,
     pub user_id: Uuid,
     pub enabled: bool,
@@ -321,7 +331,7 @@ pub struct LoginInfo{
 #[diesel(table_name=login_infos)]
 pub struct NewLoginInfo<'a>{
     pub login_info_id: &'a Uuid,
-    pub login_info_barber: &'a str,
+    pub login_info_account: &'a str,
     pub login_info_type: &'a str,
     pub user_id: &'a Uuid,
     pub enabled: bool,

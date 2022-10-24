@@ -6,7 +6,7 @@ use bigdecimal::BigDecimal;
 use uuid::Uuid;
 use crate::{
     schema::*,
-    models::{ServiceType, NewServiceType, Barber}, authorization_policy
+    models::{ServiceType, NewServiceType, Barber}, authorization_policy, constant
 };
 use diesel::{
     prelude::*, // for .filter
@@ -39,27 +39,26 @@ pub async fn get_service_types(
     
     let mut conn=pool.pool.get().unwrap();//TODO error
 
-    let barber=serde_json::from_str::<Option<Barber>>(auth.axum_session.lock().unwrap().get_data("barber"))
-	    .unwrap().unwrap();
+    let merchant_id=serde_json::from_str::<Uuid>(auth.axum_session.lock().unwrap().get_data(constant::MERCHANT_ID)).unwrap();
 
-    let get_service_types_query=|p:&PaginatedListRequest|{
-        let mut query=service_types::dsl::service_types
-            .filter(service_types::dsl::enabled.eq(true))
-            .filter(service_types::dsl::merchant_id.eq(barber.merchant_id))
+    let get_service_types_query=||{
+        let mut query=service_types::table
+            .filter(service_types::enabled.eq(true))
+            .filter(service_types::merchant_id.eq(merchant_id))
             .into_boxed();
         
-    if let Some(key)=search.key.as_ref() {
-        if key.len()>0 {
-            query=query
-            .filter(service_types::dsl::name.ilike(format!("%{key}%")));   
+        if let Some(key)=search.key.as_ref() {
+            if key.len()>0 {
+                query=query
+                .filter(service_types::name.ilike(format!("%{key}%")));   
+                }
             }
-        }
         query
     };
 
-    let count=get_service_types_query(&params).count().get_result(&mut *conn).map_err(|e|(StatusCode::INTERNAL_SERVER_ERROR,e.to_string()))?;
-    let data=get_service_types_query(&params)
-        .order(service_types::dsl::create_time.desc())
+    let count=get_service_types_query().count().get_result(&mut *conn).map_err(|e|(StatusCode::INTERNAL_SERVER_ERROR,e.to_string()))?;
+    let data=get_service_types_query()
+        .order(service_types::create_time.desc())
         .limit(params.page_size)
         .offset(params.page_index*params.page_size)
         .get_results::<ServiceType>(&mut *conn)
@@ -87,13 +86,12 @@ pub async fn add_service_type(
     
     let mut conn=pool.pool.get().unwrap();//TODO error
     
-    let barber=serde_json::from_str::<Option<Barber>>(auth.axum_session.lock().unwrap().get_data("barber"))
-	    .unwrap().unwrap();
+    let merchant_id=serde_json::from_str::<Uuid>(auth.axum_session.lock().unwrap().get_data(constant::MERCHANT_ID)).unwrap();
 
-    let existed=select(exists(service_types::dsl::service_types
-        .filter(service_types::dsl::enabled.eq(true))
-        .filter(service_types::dsl::name.eq(&req.name))
-        .filter(service_types::dsl::merchant_id.eq(barber.merchant_id))))
+    let existed=select(exists(service_types::table
+        .filter(service_types::enabled.eq(true))
+        .filter(service_types::name.eq(&req.name))
+        .filter(service_types::merchant_id.eq(merchant_id))))
         .get_result::<bool>(&mut *conn)
         .ok();
     
@@ -102,7 +100,7 @@ pub async fn add_service_type(
     } else {
         let new_service_type=NewServiceType{
             service_type_id: &Uuid::new_v4(),
-            merchant_id:&barber.merchant_id,
+            merchant_id:&merchant_id,
             name:&req.name,
             normal_prize:&req.normal_prize,
             member_prize:&req.member_prize,
@@ -119,10 +117,10 @@ pub async fn add_service_type(
             (StatusCode::INTERNAL_SERVER_ERROR,e.to_string())
         })?;
 
-        let service_type=service_types::dsl::service_types
-        .filter(service_types::dsl::enabled.eq(true))
-        .filter(service_types::dsl::service_type_id.eq(new_service_type.service_type_id))
-        .filter(service_types::dsl::merchant_id.eq(barber.merchant_id))
+        let service_type=service_types::table
+        .filter(service_types::enabled.eq(true))
+        .filter(service_types::service_type_id.eq(new_service_type.service_type_id))
+        .filter(service_types::merchant_id.eq(merchant_id))
         .get_result::<ServiceType>(&mut *conn)
         .map_err(|e|(StatusCode::INTERNAL_SERVER_ERROR,e.to_string()))?;
         
@@ -144,18 +142,17 @@ pub async fn delete_service_type(
     
     let mut conn=pool.pool.get().unwrap();//TODO error
 
-    let barber=serde_json::from_str::<Option<Barber>>(auth.axum_session.lock().unwrap().get_data("barber"))
-	    .unwrap().unwrap();
+    let merchant_id=serde_json::from_str::<Uuid>(auth.axum_session.lock().unwrap().get_data(constant::MERCHANT_ID)).unwrap();
 
     let count=diesel::update(
-        service_types::dsl::service_types
-        .filter(service_types::dsl::service_type_id.eq(service_type_id))
-        .filter(service_types::dsl::merchant_id.eq(barber.merchant_id))
-        .filter(service_types::dsl::enabled.eq(true))
+        service_types::table
+        .filter(service_types::service_type_id.eq(service_type_id))
+        .filter(service_types::merchant_id.eq(merchant_id))
+        .filter(service_types::enabled.eq(true))
     )
     .set((
-        service_types::dsl::enabled.eq(false),
-        service_types::dsl::update_time.eq(Local::now())
+        service_types::enabled.eq(false),
+        service_types::update_time.eq(Local::now())
     ))
     .execute(&mut *conn).map_err(|e|{
         tracing::error!("{}",e.to_string());
@@ -184,21 +181,20 @@ pub async fn update_service_type(
    
     let mut conn=pool.pool.get().unwrap();//TODO error
 
-    let barber=serde_json::from_str::<Option<Barber>>(auth.axum_session.lock().unwrap().get_data("barber"))
-	    .unwrap().unwrap();
+    let merchant_id=serde_json::from_str::<Uuid>(auth.axum_session.lock().unwrap().get_data(constant::MERCHANT_ID)).unwrap();
 
     let num=diesel::update(
-        service_types::dsl::service_types
-        .filter(service_types::dsl::service_type_id.eq(service_type_id))
-        .filter(service_types::dsl::merchant_id.eq(barber.merchant_id))
-        .filter(service_types::dsl::enabled.eq(true))
+        service_types::table
+        .filter(service_types::service_type_id.eq(service_type_id))
+        .filter(service_types::merchant_id.eq(merchant_id))
+        .filter(service_types::enabled.eq(true))
     )
     .set((
-            service_types::dsl::name.eq(req.name),
-            service_types::dsl::normal_prize.eq(req.normal_prize),
-            service_types::dsl::member_prize.eq(req.member_prize),
-            service_types::dsl::estimated_duration.eq(req.estimated_duration),
-            service_types::dsl::update_time.eq(Local::now())
+            service_types::name.eq(req.name),
+            service_types::normal_prize.eq(req.normal_prize),
+            service_types::member_prize.eq(req.member_prize),
+            service_types::estimated_duration.eq(req.estimated_duration),
+            service_types::update_time.eq(Local::now())
         ))
     .execute(&mut *conn).map_err(|e|{
         tracing::error!("{}",e.to_string());
@@ -226,13 +222,12 @@ pub async fn get_service_type(
 
     let mut conn=pool.pool.get().unwrap();//TODO error  
     
-    let barber=serde_json::from_str::<Option<Barber>>(auth.axum_session.lock().unwrap().get_data("barber"))
-	    .unwrap().unwrap();
+    let merchant_id=serde_json::from_str::<Uuid>(auth.axum_session.lock().unwrap().get_data(constant::MERCHANT_ID)).unwrap();
 
-    let service_type=service_types::dsl::service_types
-        .filter(service_types::dsl::enabled.eq(true))
-        .filter(service_types::dsl::service_type_id.eq(service_type_id))
-        .filter(service_types::dsl::merchant_id.eq(barber.merchant_id))
+    let service_type=service_types::table
+        .filter(service_types::enabled.eq(true))
+        .filter(service_types::service_type_id.eq(service_type_id))
+        .filter(service_types::merchant_id.eq(merchant_id))
         .get_result::<ServiceType>(&mut *conn)
         .map_err(|e|(StatusCode::INTERNAL_SERVER_ERROR,e.to_string()))?;
         

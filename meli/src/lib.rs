@@ -2,11 +2,14 @@ pub mod models;
 pub mod schema;
 pub mod axum_pg_pool;
 pub mod utils;
-mod login_manager;
 pub mod authorization_policy;
 pub mod handlers;
+pub mod constant;
+
+use std::env;
 
 use chrono::Local;
+use diesel::expression::is_aggregate::No;
 use models::*;
 use uuid::Uuid;
 
@@ -23,6 +26,8 @@ pub fn create_or_update_super_user_barber(conn:&mut PgConnection){
         merchant_name:"测试商户",
         company_name:None,
         credential_no:None,
+        address:None,
+        remark:None,
         enabled:true,
         create_time: Local::now(),
         update_time: Local::now(),
@@ -38,10 +43,10 @@ pub fn create_or_update_super_user_barber(conn:&mut PgConnection){
     perms.push(authorization_policy::MERCHANT_ADMINISTRATOR); //商户管理员权限
     perms.push(authorization_policy::BARBER_BASE); //商户用户权限
     
-    let perm_ids=permissions::dsl::permissions
-    .filter(permissions::dsl::permission_code.eq_any(perms)) 
-    .filter(permissions::dsl::enabled.eq(true))
-    .select(permissions::dsl::permission_id)
+    let perm_ids=permissions::table
+    .filter(permissions::permission_code.eq_any(perms)) 
+    .filter(permissions::enabled.eq(true))
+    .select(permissions::permission_id)
     .get_results::<Uuid>(conn).unwrap();
 
     let user_id=Uuid::new_v4();
@@ -81,7 +86,7 @@ pub fn create_or_update_super_user_barber(conn:&mut PgConnection){
     // 3.1 add login info
     let l_i_1= NewLoginInfo{
         login_info_id: &Uuid::new_v4(),
-        login_info_barber: "13764197590",
+        login_info_account: "13764197590",
         login_info_type: "Cellphone",
         user_id: &user_id,
         enabled: true,
@@ -90,8 +95,8 @@ pub fn create_or_update_super_user_barber(conn:&mut PgConnection){
     };
     let l_i_2=NewLoginInfo{
         login_info_id: &Uuid::new_v4(),
-        login_info_barber: "yez",
-        login_info_type: "Username",
+        login_info_account: "463432609@qq.com",
+        login_info_type: "Email",
         user_id: &user_id,
         enabled: true,
         create_time: Local::now(),
@@ -104,9 +109,9 @@ pub fn create_or_update_super_user_barber(conn:&mut PgConnection){
 
     // 3.2 add password login info provider
     let password = b"123456";
-    let salt = b"randomsalt";
+    let salt = env::var("DATABASE_ENCRYPTION_SAULT").unwrap();
     let config = argon2::Config::default();
-    let hash = argon2::hash_encoded(password, salt, &config).unwrap();
+    let hash = argon2::hash_encoded(password, salt.as_bytes(), &config).unwrap();
     let new_password_login_provider=NewPasswordLoginProvider{
         user_id: &user_id,
         password_hash: &hash,

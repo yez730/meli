@@ -32,19 +32,19 @@ impl AxumDatabasePool for AxumPgPool{
         let mut conn=self.pool.get()
             .map_err(|e| anyhow!("Get connection error: {}",e))?;
         
-        let session=sessions::dsl::sessions
-            .filter(sessions::dsl::session_id.eq(session_data.session_id))
+        let session=sessions::table
+            .filter(sessions::session_id.eq(session_data.session_id))
             .get_result::<Session>(&mut *conn).ok();
         
         let data_str=serde_json::to_string(&session_data.data).map_err(|e| anyhow!("Serialize data error: {}",e))?;
         match session {
             Some(session)=>{
-                diesel::update(sessions::dsl::sessions.find(session.id))
+                diesel::update(sessions::table.find(session.id))
                 .set((
-                        sessions::dsl::user_id.eq(session_data.user_id), // TODO need？
-                        sessions::dsl::data.eq(data_str),
-                        sessions::dsl::expiry_time.eq(session_data.expiry_time),
-                        sessions::dsl::update_time.eq(Local::now()),
+                        sessions::user_id.eq(session_data.user_id), // TODO need？
+                        sessions::data.eq(data_str),
+                        sessions::expiry_time.eq(session_data.expiry_time),
+                        sessions::update_time.eq(Local::now()),
                     ))
                 .execute(&mut *conn)
                 .map_err(|e| anyhow!("Execute error: {}",e))?;
@@ -73,8 +73,8 @@ impl AxumDatabasePool for AxumPgPool{
         let mut conn=self.pool.get()
             .map_err(|e| anyhow!("Get connection error: {}",e))?;
         
-        let session=sessions::dsl::sessions
-            .filter(sessions::dsl::session_id.eq(session_id)) 
+        let session=sessions::table
+            .filter(sessions::session_id.eq(session_id)) 
             .get_result::<Session>(&mut *conn);
 
         match session {

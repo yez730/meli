@@ -20,7 +20,7 @@ diesel::table! {
     login_infos (id) {
         id -> Int8,
         login_info_id -> Uuid,
-        login_info_barber -> Varchar,
+        login_info_account -> Varchar,
         login_info_type -> Varchar,
         user_id -> Uuid,
         enabled -> Bool,
@@ -42,6 +42,7 @@ diesel::table! {
         create_time -> Timestamptz,
         update_time -> Timestamptz,
         data -> Nullable<Text>,
+        remark -> Nullable<Text>,
     }
 }
 
@@ -69,6 +70,8 @@ diesel::table! {
         create_time -> Timestamptz,
         update_time -> Timestamptz,
         data -> Nullable<Text>,
+        address -> Nullable<Text>,
+        remark -> Nullable<Text>,
     }
 }
 

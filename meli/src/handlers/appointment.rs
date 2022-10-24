@@ -8,13 +8,9 @@ use uuid::Uuid;
 use random_color::{Color, Luminosity, RandomColor};
 use crate::{
     schema::*,
-    models::{Order, NewOrder, Member, Barber, ServiceType}, authorization_policy
+    models::{Order, NewOrder, Member, Barber, ServiceType}, authorization_policy, constant
 };
-use diesel::{
-    prelude::*, // for .filter
-    select, 
-    dsl::exists, expression::is_aggregate::No,
-}; 
+use diesel::prelude::*;
 use crate::{models::User, axum_pg_pool::AxumPgPool};
 
 use super::Search;
@@ -73,23 +69,26 @@ pub async fn get_appointments(
     
     let mut conn=pool.pool.get().unwrap();//TODO error
   
-    let barber=serde_json::from_str::<Option<Barber>>(auth.axum_session.lock().unwrap().get_data("barber"))
-        .unwrap().unwrap();
+    let merchant_id=serde_json::from_str::<Uuid>(auth.axum_session.lock().unwrap().get_data(constant::MERCHANT_ID))
+        .unwrap();
 
-    let mut query=orders::dsl::orders
+    let mut query=orders::table
         .left_join(members::table.on(members::member_id.nullable().eq(orders::member_id)))
         .inner_join(barbers::table.on(orders::barber_id.eq(barbers::barber_id)))
         .inner_join(service_types::table.on(orders::service_type_id.eq(service_types::service_type_id)))
-        .filter(orders::dsl::enabled.eq(true))
-        .filter(orders::dsl::merchant_id.eq(barber.merchant_id))
-        .filter(orders::dsl::end_time.ge(params.start_date).and(orders::dsl::start_time.lt(params.end_date)))
+        .filter(members::enabled.eq(true))
+        .filter(barbers::enabled.eq(true))
+        .filter(service_types::enabled.eq(true))
+        .filter(orders::enabled.eq(true))
+        .filter(orders::merchant_id.eq(merchant_id))
+        .filter(orders::end_time.ge(params.start_date).and(orders::start_time.lt(params.end_date)))
         .into_boxed();
 
     if let Some(barber_id)=search.barber_id{
-        query=query.filter(orders::dsl::barber_id.eq(barber_id))
+        query=query.filter(orders::barber_id.eq(barber_id))
     }
 
-    let data= query .order(orders::dsl::create_time.desc())
+    let data= query.order(orders::create_time.desc())
         .get_results::<(Order,Option<Member>,Barber,ServiceType)>(&mut *conn)
         .map(|v|v.into_iter().map(|t|Event{
             all_day:false,
@@ -125,14 +124,14 @@ pub async fn add_appointment(
     
     let mut conn=pool.pool.get().unwrap();//TODO error
 
-    let barber=serde_json::from_str::<Option<Barber>>(auth.axum_session.lock().unwrap().get_data("barber"))
-        .unwrap().unwrap();
+    let merchant_id=serde_json::from_str::<Uuid>(auth.axum_session.lock().unwrap().get_data(constant::MERCHANT_ID))
+        .unwrap();
 
     let new_appointment=NewOrder{
         order_id: &Uuid::new_v4(),
         start_time:req.start_time,
         end_time:req.end_time,
-        merchant_id:&barber.merchant_id,
+        merchant_id:&merchant_id,
         consumer_type:if req.member_id.is_none() { "walk-in" } else { "member" },
         member_id:req.member_id.as_ref(),
         barber_id:&req.barber_id,
@@ -158,9 +157,9 @@ pub async fn add_appointment(
         .left_join(members::table.on(members::member_id.nullable().eq(orders::member_id)))
         .inner_join(barbers::table.on(orders::barber_id.eq(barbers::barber_id)))
         .inner_join(service_types::table.on(orders::service_type_id.eq(service_types::service_type_id)))
-        .filter(orders::dsl::enabled.eq(true))
-        .filter(orders::dsl::merchant_id.eq(barber.merchant_id))
-        .filter(orders::dsl::order_id.eq(new_appointment.order_id))
+        .filter(orders::enabled.eq(true))
+        .filter(orders::merchant_id.eq(merchant_id))
+        .filter(orders::order_id.eq(new_appointment.order_id))
         .get_result::<(Order,Option<Member>,Barber,ServiceType)>(&mut *conn)
         .map(|t|Event{
             all_day:false,
@@ -201,16 +200,16 @@ pub async fn get_appointment(
 
     let mut conn=pool.pool.get().unwrap();//TODO error  
     
-    let barber=serde_json::from_str::<Option<Barber>>(auth.axum_session.lock().unwrap().get_data("barber"))
-        .unwrap().unwrap();
+    let merchant_id=serde_json::from_str::<Uuid>(auth.axum_session.lock().unwrap().get_data(constant::MERCHANT_ID))
+        .unwrap();
 
     let event=orders::table
         .left_join(members::table.on(members::member_id.nullable().eq(orders::member_id)))
         .inner_join(barbers::table.on(orders::barber_id.eq(barbers::barber_id)))
         .inner_join(service_types::table.on(orders::service_type_id.eq(service_types::service_type_id)))
-        .filter(orders::dsl::enabled.eq(true))
-        .filter(orders::dsl::merchant_id.eq(barber.merchant_id))
-        .filter(orders::dsl::order_id.eq(appointment_id))
+        .filter(orders::enabled.eq(true))
+        .filter(orders::merchant_id.eq(merchant_id))
+        .filter(orders::order_id.eq(appointment_id))
         .get_result::<(Order,Option<Member>,Barber,ServiceType)>(&mut *conn)
         .map(|t|Event{
             all_day:false,
