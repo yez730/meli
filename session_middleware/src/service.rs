@@ -20,12 +20,12 @@ use std::{
 use tower_service::Service;
 use chrono::{Local, Duration};
 
-use crate::{database_pool::AxumDatabasePool, session_store::AxumSessionStore, session::AxumSession, constants::SESSIONID, config::AxumSessionConfig};
+use crate::{database::AxumDatabaseTrait, session_store::AxumSessionStore, session::AxumSession, constants::SESSIONID, config::AxumSessionConfig};
 
 #[derive(Clone)]
 pub struct AxumSessionService<S, T>
 where
-    T: AxumDatabasePool + Clone + Debug + Sync + Send + 'static,
+    T: AxumDatabaseTrait + Clone + Debug + Sync + Send + 'static,
 {
     pub(crate) session_store: AxumSessionStore<T>,
     pub(crate) inner: S,
@@ -42,7 +42,7 @@ where
     Infallible: From<<S as Service<Request<ReqBody>>>::Error>,
     ResBody: HttpBody<Data = Bytes> + Send + 'static,
     ResBody::Error: Into<BoxError>,
-    T: AxumDatabasePool + Clone + Debug + Sync + Send + 'static,
+    T: AxumDatabaseTrait + Clone + Debug + Sync + Send + 'static,
 {
     type Response = Response<BoxBody>;
     type Error = Infallible;
@@ -85,7 +85,7 @@ where
 impl<S, T> Debug for AxumSessionService<S, T>
 where
     S: Debug,
-    T: AxumDatabasePool + Clone + Debug + Sync + Send + 'static,
+    T: AxumDatabaseTrait + Clone + Debug + Sync + Send + 'static,
 {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         f.debug_struct("AxumSessionService")

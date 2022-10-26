@@ -5,7 +5,7 @@ use chrono::{DateTime, Local};
 use uuid::Uuid;
 
 #[async_trait]
-pub trait AxumDatabasePool{
+pub trait AxumDatabaseTrait{
     async fn store(&self,session_data:&SessionData) -> Result<(), anyhow::Error>;
 
     async fn load(&self, session_id: &Uuid) -> Result<SessionData, anyhow::Error>;

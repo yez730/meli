@@ -8,7 +8,7 @@ use regex::Regex;
 use serde::Deserialize;
 use uuid::Uuid;
 
-use crate::{axum_pg_pool::AxumPgPool, models::{User, NewMerchant, NewUser, NewLoginInfo, NewPasswordLoginProvider, NewBarber, Barber, Merchant, Permission, LoginInfo}, schema::{login_infos, merchants, users, password_login_providers, barbers}, authorization_policy, constant, regex_constants::CellphoneRegexString};
+use crate::{axum_pg::AxumPg, models::{User, NewMerchant, NewUser, NewLoginInfo, NewPasswordLoginProvider, NewBarber, Barber, Merchant, Permission, LoginInfo}, schema::{login_infos, merchants, users, password_login_providers, barbers}, authorization_policy, constant, regex_constants::CELLPHONE_REGEX_STRING};
 use diesel::{
     prelude::*,
     select, 
@@ -24,13 +24,13 @@ pub struct RegisterMerchantRequest{
     pub password:String,
 }
 
-pub async fn register_merchant(State(pool):State<AxumPgPool>,mut auth: AuthSession<AxumPgPool, AxumPgPool,User>,Json(req):Json<RegisterMerchantRequest>)->Result<Json<BarberResponse>,(StatusCode,String)>{
-    let mut conn=pool.pool.get().unwrap();
+pub async fn register_merchant(State(pg):State<AxumPg>,mut auth: AuthSession<AxumPg, AxumPg,User>,Json(req):Json<RegisterMerchantRequest>)->Result<Json<BarberResponse>,(StatusCode,String)>{
+    let mut conn=pg.pool.get().unwrap();
     
     let login_info_type;
     if EmailAddress::is_valid(req.login_account.as_str()){
         login_info_type="Email";
-    } else if Regex::new(CellphoneRegexString).unwrap().is_match(req.login_account.as_str()){
+    } else if Regex::new(CELLPHONE_REGEX_STRING).unwrap().is_match(req.login_account.as_str()){
         login_info_type="Cellphone";
     } else {
         return Err((StatusCode::BAD_REQUEST,"手机号或邮箱格式不正确".to_string()));
@@ -58,13 +58,13 @@ pub async fn register_merchant(State(pool):State<AxumPgPool>,mut auth: AuthSessi
         data: None,
         address:None,
         remark:None,
-     };
-     let merchant=diesel::insert_into(merchants::table)
-     .values(&new_merchant)
-     .get_result::<Merchant>(&mut *conn).map_err(|e|{
-         tracing::error!("{}",e.to_string());
-         (StatusCode::INTERNAL_SERVER_ERROR,e.to_string())
-     })?;
+    };
+    let merchant=diesel::insert_into(merchants::table)
+        .values(&new_merchant)
+        .get_result::<Merchant>(&mut *conn).map_err(|e|{
+            tracing::error!("{}",e.to_string());
+            (StatusCode::INTERNAL_SERVER_ERROR,e.to_string())
+        })?;
 
     let user:User;
 
@@ -76,12 +76,12 @@ pub async fn register_merchant(State(pool):State<AxumPgPool>,mut auth: AuthSessi
 
     if let Some(login_info)=login_info{
         user=users::table
-        .filter(users::enabled.eq(true))
-        .filter(users::user_id.eq(login_info.user_id))
-        .get_result(&mut *conn).map_err(|e|{
-            tracing::error!("{}",e.to_string());
-            (StatusCode::INTERNAL_SERVER_ERROR,e.to_string())
-        })?;
+            .filter(users::enabled.eq(true))
+            .filter(users::user_id.eq(login_info.user_id))
+            .get_result(&mut *conn).map_err(|e|{
+                tracing::error!("{}",e.to_string());
+                (StatusCode::INTERNAL_SERVER_ERROR,e.to_string())
+            })?;
     }else {
         let user_description=format!("Administrator of merchant {}",req.merchant_name);
         let new_user=NewUser{
@@ -95,11 +95,11 @@ pub async fn register_merchant(State(pool):State<AxumPgPool>,mut auth: AuthSessi
             data: None,
         };
         user=diesel::insert_into(users::table)
-        .values(&new_user)
-        .get_result::<User>(&mut *conn).map_err(|e|{
-            tracing::error!("{}",e.to_string());
-            (StatusCode::INTERNAL_SERVER_ERROR,e.to_string())
-        })?;
+            .values(&new_user)
+            .get_result::<User>(&mut *conn).map_err(|e|{
+                tracing::error!("{}",e.to_string());
+                (StatusCode::INTERNAL_SERVER_ERROR,e.to_string())
+            })?;
 
         let login_info=NewLoginInfo{
             login_info_id: &Uuid::new_v4(),
@@ -111,11 +111,11 @@ pub async fn register_merchant(State(pool):State<AxumPgPool>,mut auth: AuthSessi
             update_time: Local::now(),
         };
         diesel::insert_into(login_infos::table)
-        .values(&login_info)
-        .execute(&mut *conn).map_err(|e|{
-            tracing::error!("{}",e.to_string());
-            (StatusCode::INTERNAL_SERVER_ERROR,e.to_string())
-        })?;
+            .values(&login_info)
+            .execute(&mut *conn).map_err(|e|{
+                tracing::error!("{}",e.to_string());
+                (StatusCode::INTERNAL_SERVER_ERROR,e.to_string())
+            })?;
     }
    
      let new_barber=NewBarber{
@@ -131,11 +131,11 @@ pub async fn register_merchant(State(pool):State<AxumPgPool>,mut auth: AuthSessi
         data: None,
     };
     let barber=diesel::insert_into(barbers::table)
-    .values(&new_barber)
-    .get_result::<Barber>(&mut *conn).map_err(|e|{
-        tracing::error!("{}",e.to_string());
-        (StatusCode::INTERNAL_SERVER_ERROR,e.to_string())
-    })?;
+        .values(&new_barber)
+        .get_result::<Barber>(&mut *conn).map_err(|e|{
+            tracing::error!("{}",e.to_string());
+            (StatusCode::INTERNAL_SERVER_ERROR,e.to_string())
+        })?;
 
     // add permissions
     for &permission_code in authorization_policy::DEFAULT_PERMISSIONS_OF_MERCHANT_BARBER{
@@ -147,11 +147,11 @@ pub async fn register_merchant(State(pool):State<AxumPgPool>,mut auth: AuthSessi
         let mut permission_ids=permissions.iter().map(|p|p.permission_id).collect::<Vec<_>>();
         if !permissions.into_iter().any(|p|p.permission_code==permission_code){
             let permission_id=permissions::table
-            .filter(permissions::permission_code.eq(permission_code)) 
-            .filter(permissions::enabled.eq(true))
-            .select(permissions::permission_id)
-            .get_result::<Uuid>(&mut *conn)
-            .unwrap();
+                .filter(permissions::permission_code.eq(permission_code)) 
+                .filter(permissions::enabled.eq(true))
+                .select(permissions::permission_id)
+                .get_result::<Uuid>(&mut *conn)
+                .unwrap();
 
             permission_ids.push(permission_id);
 
@@ -183,11 +183,11 @@ pub async fn register_merchant(State(pool):State<AxumPgPool>,mut auth: AuthSessi
         data:None
     };
     diesel::insert_into(password_login_providers::table)
-    .values(&new_password_login_provider)
-    .execute(&mut *conn).map_err(|e|{
-        tracing::error!("{}",e.to_string());
-        (StatusCode::INTERNAL_SERVER_ERROR,e.to_string())
-    })?;
+        .values(&new_password_login_provider)
+        .execute(&mut *conn).map_err(|e|{
+            tracing::error!("{}",e.to_string());
+            (StatusCode::INTERNAL_SERVER_ERROR,e.to_string())
+        })?;
         
     auth.sign_in(user.user_id).await;
 

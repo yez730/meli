@@ -6,4 +6,4 @@ pub mod session_store;
 pub mod config;
 pub mod session;
 pub mod constants;
-pub mod database_pool;
+pub mod database;

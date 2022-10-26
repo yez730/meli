@@ -2,7 +2,7 @@ use std::collections::HashMap;
 
 use anyhow::{anyhow, Ok};
 use async_trait::async_trait;
-use axum_session_middleware::database_pool::{AxumDatabasePool,self};
+use axum_session_middleware::database::{AxumDatabaseTrait,self};
 use chrono::Local;
 use uuid::Uuid;
 use crate::models::{NewSession, Session};
@@ -14,11 +14,11 @@ use diesel::r2d2::ConnectionManager;
 use diesel::r2d2::Pool;
 
 #[derive(Clone)]
-pub struct AxumPgPool{
+pub struct AxumPg{
     pub pool:Pool<ConnectionManager<PgConnection>>,
 }
 
-impl std::fmt::Debug for AxumPgPool {
+impl std::fmt::Debug for AxumPg {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("AxumPgPool")
          .field("connection", &"`&self.connection`") //TODO fix
@@ -27,8 +27,8 @@ impl std::fmt::Debug for AxumPgPool {
 }
 
 #[async_trait]
-impl AxumDatabasePool for AxumPgPool{
-    async fn store(&self,session_data:&database_pool::SessionData) -> Result<(), anyhow::Error>{
+impl AxumDatabaseTrait for AxumPg{
+    async fn store(&self,session_data:&database::SessionData) -> Result<(), anyhow::Error>{
         let mut conn=self.pool.get()
             .map_err(|e| anyhow!("Get connection error: {}",e))?;
         
@@ -68,7 +68,7 @@ impl AxumDatabasePool for AxumPgPool{
         Ok(())
     }
 
-    async fn load(&self, session_id: &Uuid) -> Result<database_pool::SessionData, anyhow::Error>{
+    async fn load(&self, session_id: &Uuid) -> Result<database::SessionData, anyhow::Error>{
         use std::result::Result::Ok;
         let mut conn=self.pool.get()
             .map_err(|e| anyhow!("Get connection error: {}",e))?;
@@ -85,7 +85,7 @@ impl AxumDatabasePool for AxumPgPool{
                         =>serde_json::from_str::<HashMap<String,String>>(&data).unwrap(),
                     _=>Default::default(),
                 };
-                let session_data=database_pool::SessionData{
+                let session_data=database::SessionData{
                     session_id:session.session_id,
                     user_id:session.user_id,
                     init_time:session.init_time,

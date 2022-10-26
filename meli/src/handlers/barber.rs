@@ -15,7 +15,7 @@ use diesel::{
     dsl::exists,
 };
 use crate::constant; 
-use crate::{models::User, axum_pg_pool::AxumPgPool};
+use crate::{models::User, axum_pg::AxumPg};
 
 #[derive(Serialize)]
 pub struct BarberResponse{
@@ -25,17 +25,13 @@ pub struct BarberResponse{
 }
 
 pub async fn get_current_barber(
-    State(pool):State<AxumPgPool>,
-    auth: AuthSession<AxumPgPool, AxumPgPool,User>,
+    State(pg):State<AxumPg>,
+    auth: AuthSession<AxumPg, AxumPg,User>,
 )->Result<Json<BarberResponse>,(StatusCode,String)>{
-    //检查登录
-    let _=auth.identity.as_ref().ok_or((StatusCode::UNAUTHORIZED,"no login".to_string()))?;
+    //检查登录&权限
+    auth.require_permissions(vec![authorization_policy::BARBER_BASE]).map_err(|e|(StatusCode::UNAUTHORIZED,e.to_string()))?;
 
-    //检查权限
-    auth.require_permissions(vec![authorization_policy::BARBER_BASE])
-        .map_err(|_|(StatusCode::INTERNAL_SERVER_ERROR,"no permission".to_string()))?;
-
-    let mut conn=pool.pool.get().unwrap();//TODO error  
+    let mut conn=pg.pool.get().unwrap();
     
     let merchant_id=serde_json::from_str::<Uuid>(auth.axum_session.lock().unwrap().get_data(constant::MERCHANT_ID)).unwrap();
     let user_id=auth.identity.unwrap().user_id;
@@ -56,35 +52,37 @@ pub async fn get_current_barber(
 #[derive(Deserialize)]
 pub struct UpdateInfoRequest{
     pub cellphone:Option<String>,
+
+    #[serde(rename="realName")]
     pub real_name:Option<String>,
+
     pub email:Option<String>,
 
     #[serde(rename="newPassword")]
     pub new_password:Option<String>,
 
+    #[serde(rename="oldPassword")]
     pub old_password:Option<String>,
 
     #[serde(rename="merchantName")]
     pub merchant_name:String,
+
     #[serde(rename="merchantAdderss")]
     pub merchant_address:Option<String>,
+
     #[serde(rename="merchantRemark")]
     pub merchant_remark:Option<String>,
 }
 
 pub async fn update_info(
-    State(pool):State<AxumPgPool>,
-    auth: AuthSession<AxumPgPool, AxumPgPool,User>,
+    State(pg):State<AxumPg>,
+    auth: AuthSession<AxumPg, AxumPg,User>,
     Json(req): Json<UpdateInfoRequest>
 )->Result<(),(StatusCode,String)>{
-    //检查登录
-    let _=auth.identity.as_ref().ok_or((StatusCode::UNAUTHORIZED,"no login".to_string()))?;
+    //检查登录&权限
+    auth.require_permissions(vec![authorization_policy::BARBER_BASE]).map_err(|e|(StatusCode::UNAUTHORIZED,e.to_string()))?;
 
-    //检查权限
-    auth.require_permissions(vec![authorization_policy::BARBER_BASE])
-        .map_err(|_|(StatusCode::INTERNAL_SERVER_ERROR,"no permission".to_string()))?;
-
-    let mut conn=pool.pool.get().unwrap();//TODO error
+    let mut conn=pg.pool.get().unwrap();
 
     let merchant_id=serde_json::from_str::<Uuid>(auth.axum_session.lock().unwrap().get_data(constant::MERCHANT_ID)).unwrap();
     let user_id=auth.identity.unwrap().user_id;

@@ -4,7 +4,7 @@ use axum_core::{
     BoxError,
 };
 use axum_session_middleware::{
-    session::AxumSession, database_pool::AxumDatabasePool, constants::session_keys,
+    session::AxumSession, database::AxumDatabaseTrait, constants::session_keys,
 };
 use bytes::Bytes;
 use futures::future::BoxFuture;
@@ -22,20 +22,20 @@ use tower_service::Service;
 use crate::{ user::Identity,session::{AuthSession, Authentication}};
 
 #[derive(Clone)]
-pub struct AuthSessionService<S,AuthP,User,SessionP>
+pub struct AuthSessionService<S,AuthDB,User,SessionDB>
 where
-    AuthP: Clone + Send + Sync + fmt::Debug + 'static,
-    User:Authentication<User,AuthP> + Clone + Send + Sync + 'static,
-    SessionP: AxumDatabasePool + Clone + fmt::Debug + Sync + Send + 'static,
+    AuthDB: Clone + Send + Sync + fmt::Debug + 'static,
+    User:Authentication<User,AuthDB> + Clone + Send + Sync + 'static,
+    SessionDB: AxumDatabaseTrait + Clone + fmt::Debug + Sync + Send + 'static,
 {
-    pub(crate) database_pool:AuthP,
+    pub(crate) database:AuthDB,
     pub(crate) inner: S,
     pub phantom_user: PhantomData<User>,
-    pub phantom_session_pool: PhantomData<SessionP>,
+    pub phantom_session_db: PhantomData<SessionDB>,
 }
 
-impl<S, ReqBody, ResBody,User,AuthP,SessionP> Service<Request<ReqBody>>
-    for AuthSessionService<S,AuthP,User,SessionP>
+impl<S, ReqBody, ResBody,User,AuthDB,SessionDB> Service<Request<ReqBody>>
+    for AuthSessionService<S,AuthDB,User,SessionDB>
 where
     S: Service<Request<ReqBody>, Response = Response<ResBody>, Error = Infallible>
         + Clone
@@ -46,9 +46,9 @@ where
     Infallible: From<<S as Service<Request<ReqBody>>>::Error>,
     ResBody: HttpBody<Data = Bytes> + Send + 'static,
     ResBody::Error: Into<BoxError>,
-    User:Authentication<User,AuthP> + Clone + Send + Sync + 'static,
-    AuthP: Clone + Send + Sync + fmt::Debug + 'static,
-    SessionP: AxumDatabasePool + Clone + fmt::Debug + Sync + Send + 'static,
+    User:Authentication<User,AuthDB> + Clone + Send + Sync + 'static,
+    AuthDB: Clone + Send + Sync + fmt::Debug + 'static,
+    SessionDB: AxumDatabaseTrait + Clone + fmt::Debug + Sync + Send + 'static,
 {
     type Response = Response<BoxBody>;
     type Error = Infallible;
@@ -59,12 +59,12 @@ where
     }
 
     fn call(&mut self, mut req: Request<ReqBody>) -> Self::Future {
-        let pool=self.database_pool.clone();
+        let database=self.database.clone();
         let not_ready_inner = self.inner.clone();
         let mut ready_inner = std::mem::replace(&mut self.inner, not_ready_inner); //TODO 
 
         Box::pin(async move {
-            let axum_session = match req.extensions().get::<Arc<Mutex<AxumSession<SessionP>>>>().cloned() {
+            let axum_session = match req.extensions().get::<Arc<Mutex<AxumSession<SessionDB>>>>().cloned() {
                 Some(session) => session,
                 None => {
                     return Ok(Response::builder()
@@ -83,11 +83,11 @@ where
                 }
             };
             
-            let auth_session:AuthSession<SessionP,AuthP,User> = AuthSession {
+            let auth_session:AuthSession<SessionDB,AuthDB,User> = AuthSession {
                 phantom_user:PhantomData::default(),
                 identity,
                 axum_session: axum_session,
-                database_pool:pool.clone(),
+                database:database.clone(),
             };
            
             req.extensions_mut().insert(auth_session);
@@ -97,12 +97,12 @@ where
     }
 }
 
-impl<S, AuthP,User,SessionP> fmt::Debug for AuthSessionService<S,AuthP,User,SessionP>
+impl<S, AuthDB,User,SessionDB> fmt::Debug for AuthSessionService<S,AuthDB,User,SessionDB>
 where
     S: fmt::Debug,
-    User:Authentication<User,AuthP> + Clone + Send + Sync + 'static,
-    AuthP: Clone + Send + Sync + fmt::Debug + 'static,
-    SessionP: AxumDatabasePool + Clone + fmt::Debug + Sync + Send + 'static,
+    User:Authentication<User,AuthDB> + Clone + Send + Sync + 'static,
+    AuthDB: Clone + Send + Sync + fmt::Debug + 'static,
+    SessionDB: AxumDatabaseTrait + Clone + fmt::Debug + Sync + Send + 'static,
 {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("AuthSessionService")

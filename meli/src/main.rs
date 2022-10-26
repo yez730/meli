@@ -9,7 +9,7 @@ use tracing_subscriber::{layer::SubscriberExt,util::SubscriberInitExt};
 
 use dotenvy::dotenv;
 
-use meli_backend::{ axum_pg_pool::AxumPgPool, models::User, utils::get_connection_pool, handlers::*};
+use meli_backend::{ axum_pg::AxumPg, models::User, utils::get_connection_pool, handlers::*};
 
 use appointment::*;
 use barber::*;
@@ -23,20 +23,20 @@ use statistic::*;
 
 #[tokio::main]
 async fn main(){
-    dotenv().expect("Cannot find .env file");
+    dotenv().expect("Cannot find .env file.");
     
     tracing_subscriber::registry()
         .with(tracing_subscriber::EnvFilter::new(
-            std::env::var("RUST_LOG").unwrap_or("meli_backend=trace,axum_session_authentication_middleware=trace,axum_session_middleware=trace".into()),
+            std::env::var("RUST_LOG").expect("Cannot find RUST_LOG environment variable."),
         ))
         .with(tracing_subscriber::fmt::layer())
         .init();
 
-    let axum_pg_pool=AxumPgPool{
+    let axum_pg=AxumPg{
         pool:get_connection_pool()
     };
 
-    let app=Router::with_state(axum_pg_pool.clone())
+    let app=Router::with_state(axum_pg.clone())
         .route("/login", post(barber_login_by_password))
         .route("/identity/logout", get(logout))
         .route("/identity/current", get(get_current_identity))
@@ -73,9 +73,9 @@ async fn main(){
             .allow_methods([Method::GET,Method::POST,Method::DELETE])
             .allow_credentials(true)
         )
-        .layer(AuthSessionLayer::<AxumPgPool, AxumPgPool,User>::new(axum_pg_pool.clone()))
+        .layer(AuthSessionLayer::<AxumPg, AxumPg,User>::new(axum_pg.clone()))
         .layer(AxumSessionLayer::new(
-            AxumSessionStore::new(axum_pg_pool.clone(),
+            AxumSessionStore::new(axum_pg.clone(),
             AxumSessionConfig::default().with_cookie_domain("127.0.0.1"))
         ))
         .layer(TraceLayer::new_for_http());

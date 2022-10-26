@@ -3,12 +3,12 @@ use chrono::Local;
 use uuid::Uuid;
 use std::fmt::Debug;
 
-use crate::{session_data::AxumSessionData, database_pool::AxumDatabasePool, session_store::AxumSessionStore};
+use crate::{session_data::AxumSessionData, database::AxumDatabaseTrait, session_store::AxumSessionStore};
 
 #[derive(Clone,Debug)]
 pub struct AxumSession<T>
 where
-    T: AxumDatabasePool + Clone + Debug + Sync + Send + 'static,
+    T: AxumDatabaseTrait + Clone + Debug + Sync + Send + 'static,
 {
     pub(crate) store: AxumSessionStore<T>,
     pub(crate) session_id:SessionId,
@@ -16,7 +16,6 @@ where
     pub(crate) is_modified:bool,
 }
 
-// TODO viriant as str
 pub(crate) enum SessionIdType{
     Cached,
     Empty
@@ -63,7 +62,7 @@ impl SessionId{
 
 impl<T> AxumSession<T>
 where
-    T: AxumDatabasePool + Clone + Debug + Sync + Send + 'static,
+    T: AxumDatabaseTrait + Clone + Debug + Sync + Send + 'static,
 {
     pub(crate) async fn load_or_init(store: &AxumSessionStore<T>,session_id:Option<&str>)->AxumSession<T>{
         match session_id {

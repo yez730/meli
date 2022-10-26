@@ -5,32 +5,46 @@ use chrono::{Local, DateTime};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use uuid::Uuid;
-use random_color::{Color, Luminosity, RandomColor};
+use random_color::RandomColor;
 use crate::{
     schema::*,
     models::{Order, NewOrder, Member, Barber, ServiceType}, authorization_policy, constant
 };
 use diesel::prelude::*;
-use crate::{models::User, axum_pg_pool::AxumPgPool};
+use crate::{models::User, axum_pg::AxumPg};
 
 use super::Search;
 
 #[derive(Deserialize)]
 pub struct AppointmentRequest{
+    #[serde(rename ="startTime")]
     pub start_time:DateTime<Local>,
+
+    #[serde(rename ="endTime")]
     pub end_time:DateTime<Local>,
+
+    #[serde(rename ="serviceTypeId")]
     pub service_type_id:Uuid,
+
+    #[serde(rename ="barberId")]
     pub barber_id:Uuid,
+
+    #[serde(rename ="memberId")]
     pub member_id:Option<Uuid>,
 
+    #[serde(rename ="paymentType")]
     pub payment_type:String, // member/cash
+
     pub amount:BigDecimal,
     pub remark:Option<String>,
 }
 
 #[derive(Deserialize)]
 pub struct CalendarRequest{
+    #[serde(rename ="startDate")]
     pub start_date:DateTime<Local>,
+
+    #[serde(rename ="endDate")]
     pub end_date:DateTime<Local>,
 }
 
@@ -40,37 +54,36 @@ pub struct Event{
     pub all_day:bool,//false
    
     pub title:String,
+
     pub editable:bool,//false
+
     #[serde(rename = "startEditable")]
     pub start_editable:bool,//false
+
     pub display:String,//'auto' or 'background'
 
     #[serde(rename = "backgroundColor")]
     pub background_color:String,
 
     #[serde(rename = "extendedProps")]
-    pub extended_props:Value,//{}
+    pub extended_props:Value,//需为json对象
+
     #[serde(flatten)]
     pub order:Order,
 }
 
 pub async fn get_appointments(
-    State(pool):State<AxumPgPool>,
+    State(pg):State<AxumPg>,
     Query(params):Query<CalendarRequest>, 
     Query(search):Query<Search>, 
-    auth: AuthSession<AxumPgPool, AxumPgPool,User>,
+    auth: AuthSession<AxumPg, AxumPg,User>,
 )->Result<Json<Vec<Event>>,(StatusCode,String)>{
-    //检查登录
-    let _=auth.identity.as_ref().ok_or((StatusCode::UNAUTHORIZED,"no login".to_string()))?;
-
-    //检查权限
-    auth.require_permissions(vec![authorization_policy::BARBER_BASE])
-        .map_err(|_|(StatusCode::INTERNAL_SERVER_ERROR,"no permission".to_string()))?;
+    //检查登录&权限
+    auth.require_permissions(vec![authorization_policy::BARBER_BASE]).map_err(|e|(StatusCode::UNAUTHORIZED,e.to_string()))?;
     
-    let mut conn=pool.pool.get().unwrap();//TODO error
+    let mut conn=pg.pool.get().unwrap();
   
-    let merchant_id=serde_json::from_str::<Uuid>(auth.axum_session.lock().unwrap().get_data(constant::MERCHANT_ID))
-        .unwrap();
+    let merchant_id=serde_json::from_str::<Uuid>(auth.axum_session.lock().unwrap().get_data(constant::MERCHANT_ID)).unwrap();
 
     let mut query=orders::table
         .left_join(members::table.on(members::member_id.nullable().eq(orders::member_id)))
@@ -111,21 +124,16 @@ pub async fn get_appointments(
 }
 
 pub async fn add_appointment(
-    State(pool):State<AxumPgPool>,
-    auth: AuthSession<AxumPgPool, AxumPgPool,User>,
+    State(pg):State<AxumPg>,
+    auth: AuthSession<AxumPg, AxumPg,User>,
     Json(req): Json<AppointmentRequest>
 )->Result<Json<Event>,(StatusCode,String)>{
-    //检查登录
-    let _=auth.identity.as_ref().ok_or((StatusCode::UNAUTHORIZED,"no login".to_string()))?;
-
-    //检查权限
-    auth.require_permissions(vec![authorization_policy::BARBER_BASE])
-    .map_err(|_|(StatusCode::INTERNAL_SERVER_ERROR,"no permission".to_string()))?;
+    //检查登录&权限
+    auth.require_permissions(vec![authorization_policy::BARBER_BASE]).map_err(|e|(StatusCode::UNAUTHORIZED,e.to_string()))?;
     
-    let mut conn=pool.pool.get().unwrap();//TODO error
+    let mut conn=pg.pool.get().unwrap();
 
-    let merchant_id=serde_json::from_str::<Uuid>(auth.axum_session.lock().unwrap().get_data(constant::MERCHANT_ID))
-        .unwrap();
+    let merchant_id=serde_json::from_str::<Uuid>(auth.axum_session.lock().unwrap().get_data(constant::MERCHANT_ID)).unwrap();
 
     let new_appointment=NewOrder{
         order_id: &Uuid::new_v4(),
@@ -187,21 +195,16 @@ pub async fn add_appointment(
 }
 
 pub async fn get_appointment(
-    State(pool):State<AxumPgPool>,
+    State(pg):State<AxumPg>,
     Path(appointment_id):Path<Uuid>, 
-    auth: AuthSession<AxumPgPool, AxumPgPool,User>,
+    auth: AuthSession<AxumPg, AxumPg,User>,
 )->Result<Json<Event>,(StatusCode,String)>{
-    //检查登录
-    let _=auth.identity.as_ref().ok_or((StatusCode::UNAUTHORIZED,"no login".to_string()))?;
+    //检查登录&权限
+    auth.require_permissions(vec![authorization_policy::BARBER_BASE]).map_err(|e|(StatusCode::UNAUTHORIZED,e.to_string()))?;
 
-    //检查权限
-    auth.require_permissions(vec![authorization_policy::BARBER_BASE])
-        .map_err(|_|(StatusCode::INTERNAL_SERVER_ERROR,"no permission".to_string()))?;
-
-    let mut conn=pool.pool.get().unwrap();//TODO error  
+    let mut conn=pg.pool.get().unwrap();
     
-    let merchant_id=serde_json::from_str::<Uuid>(auth.axum_session.lock().unwrap().get_data(constant::MERCHANT_ID))
-        .unwrap();
+    let merchant_id=serde_json::from_str::<Uuid>(auth.axum_session.lock().unwrap().get_data(constant::MERCHANT_ID)).unwrap();
 
     let event=orders::table
         .left_join(members::table.on(members::member_id.nullable().eq(orders::member_id)))

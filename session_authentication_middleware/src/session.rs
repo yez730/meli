@@ -1,6 +1,6 @@
 use async_trait::async_trait;
 use axum_core::extract::FromRequestParts;
-use axum_session_middleware::{database_pool::AxumDatabasePool, session::AxumSession, constants::session_keys};
+use axum_session_middleware::{database::AxumDatabaseTrait, session::AxumSession, constants::session_keys};
 use http::{self, request::Parts, StatusCode};
 use uuid::Uuid;
 use std::{fmt::{self, Debug}, marker::PhantomData, sync::{Arc, Mutex}};
@@ -8,32 +8,32 @@ use std::{fmt::{self, Debug}, marker::PhantomData, sync::{Arc, Mutex}};
 use crate::user::Identity;
 
 #[derive(Debug, Clone)]
-pub struct AuthSession<SessionP,AuthP,User>
+pub struct AuthSession<SessionDB,AuthDB,User>
 where
-    User:Authentication<User,AuthP> + Clone + Send + Sync + 'static,
-    AuthP: Clone + Send + Sync + fmt::Debug + 'static,
-    SessionP: AxumDatabasePool + Clone + fmt::Debug + Sync + Send + 'static,
+    User:Authentication<User,AuthDB> + Clone + Send + Sync + 'static,
+    AuthDB: Clone + Send + Sync + fmt::Debug + 'static,
+    SessionDB: AxumDatabaseTrait + Clone + fmt::Debug + Sync + Send + 'static,
 {
     pub identity: Option<Identity>,
-    pub axum_session: Arc<Mutex<AxumSession<SessionP>>>,
-    pub database_pool:AuthP,
+    pub axum_session: Arc<Mutex<AxumSession<SessionDB>>>,
+    pub database:AuthDB,
     pub phantom_user: PhantomData<User>,
 }
 
 #[async_trait]
-pub trait Authentication<User,AuthP>
+pub trait Authentication<User,AuthDB>
 where
-    User:Authentication<User,AuthP> + Clone + Send + Sync + 'static,
-    AuthP: Clone + Send + Sync + fmt::Debug + 'static,
+    User:Authentication<User,AuthDB> + Clone + Send + Sync + 'static,
+    AuthDB: Clone + Send + Sync + fmt::Debug + 'static,
 {
-    fn load_identity(user_id:Uuid,pool:AuthP) -> Identity;
+    fn load_identity(user_id:Uuid,database:AuthDB) -> Identity;
 }
 
-impl<SessionP,AuthP,User> AuthSession<SessionP,AuthP,User>
+impl<SessionDB,AuthDB,User> AuthSession<SessionDB,AuthDB,User>
 where
-    User:Authentication<User,AuthP> + Clone + Send + Sync +Debug,
-    AuthP: Clone + Send + Sync + fmt::Debug + 'static,
-    SessionP: AxumDatabasePool + Clone + fmt::Debug + Sync + Send + 'static,
+    User:Authentication<User,AuthDB> + Clone + Send + Sync +Debug,
+    AuthDB: Clone + Send + Sync + fmt::Debug + 'static,
+    SessionDB: AxumDatabaseTrait + Clone + fmt::Debug + Sync + Send + 'static,
 {
     pub fn require_permissions(&self,perms:Vec<&str>)->Result<(),&str>{
         match self.identity {
@@ -44,10 +44,10 @@ where
                 if permission_ok{
                     Ok(())
                 } else {
-                    Err("no permissions.")
+                    Err("No permissions.")
                 }
             }
-            None=>Err("no login."),
+            None=>Err("No login."),
         }
     }
 
@@ -68,7 +68,7 @@ where
         let mut session=self.axum_session.lock().unwrap();
 
         if let Some(user_id) =session.get_user_id(){
-            let identity=User::load_identity(user_id,self.database_pool.clone());
+            let identity=User::load_identity(user_id,self.database.clone());
 
             session.set_data(session_keys::IDENTITY.to_string(), serde_json::to_string(&identity).unwrap());
         }
@@ -80,11 +80,11 @@ where
 }
 
 #[async_trait]
-impl<S, SessionP,AuthP,User> FromRequestParts<S> for AuthSession<SessionP,AuthP,User>
+impl<S, SessionDB,AuthDB,User> FromRequestParts<S> for AuthSession<SessionDB,AuthDB,User>
 where
-    User:Authentication<User,AuthP> + Clone + Send + Sync + 'static,
-    AuthP: Clone + Send + Sync + fmt::Debug + 'static,
-    SessionP: AxumDatabasePool + Clone + fmt::Debug + Sync + Send + 'static,
+    User:Authentication<User,AuthDB> + Clone + Send + Sync + 'static,
+    AuthDB: Clone + Send + Sync + fmt::Debug + 'static,
+    SessionDB: AxumDatabaseTrait + Clone + fmt::Debug + Sync + Send + 'static,
     S: Send + Sync,
 {
     type Rejection = (http::StatusCode, &'static str);
@@ -92,7 +92,7 @@ where
     async fn from_request_parts(parts: &mut Parts, _state: &S) -> Result<Self, Self::Rejection> {
         parts
             .extensions
-            .get::<AuthSession<SessionP,AuthP,User>>()
+            .get::<AuthSession<SessionDB,AuthDB,User>>()
             .cloned()
             .ok_or((
                 StatusCode::INTERNAL_SERVER_ERROR,

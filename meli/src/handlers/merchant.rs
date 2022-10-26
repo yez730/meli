@@ -14,20 +14,16 @@ use diesel::{
     select, 
     dsl::exists,
 };
-use crate::{models::User, axum_pg_pool::AxumPgPool};
+use crate::{models::User, axum_pg::AxumPg};
 use super::{Search, barber::BarberResponse};
 
-pub async fn get_current_merchant(State(pool):State<AxumPgPool>,
-    auth: AuthSession<AxumPgPool, AxumPgPool,User>,
+pub async fn get_current_merchant(State(pg):State<AxumPg>,
+    auth: AuthSession<AxumPg, AxumPg,User>,
     )->Result<Json<Merchant>,(StatusCode,String)>{
-    //检查登录
-    let _=auth.identity.as_ref().ok_or((StatusCode::UNAUTHORIZED,"no login".to_string()))?;
+    //检查登录&权限
+    auth.require_permissions(vec![authorization_policy::MERCHANT_ADMINISTRATOR]).map_err(|e|(StatusCode::UNAUTHORIZED,e.to_string()))?;
 
-    //检查权限
-    auth.require_permissions(vec![authorization_policy::MERCHANT_ADMINISTRATOR])
-        .map_err(|_|(StatusCode::INTERNAL_SERVER_ERROR,"no permission".to_string()))?;
-
-    let mut conn=pool.pool.get().unwrap();//TODO error
+    let mut conn=pg.pool.get().unwrap();
     
     let merchant_id=serde_json::from_str::<Uuid>(auth.axum_session.lock().unwrap().get_data(constant::MERCHANT_ID)).unwrap();
 
@@ -42,11 +38,12 @@ pub async fn get_current_merchant(State(pool):State<AxumPgPool>,
 
 #[derive(Deserialize)]
 pub struct GetMerchantsByLoginAccount{
+    #[serde(rename ="loginAccount")]
     login_account:String,
 }
 
-pub async fn get_merchants_by_login_account(State(pool):State<AxumPgPool>,  Query(query):Query<GetMerchantsByLoginAccount>,)->Result<Json<Vec<Merchant>>,(StatusCode,String)>{
-    let mut conn=pool.pool.get().unwrap();//TODO error
+pub async fn get_merchants_by_login_account(State(pg):State<AxumPg>,  Query(query):Query<GetMerchantsByLoginAccount>,)->Result<Json<Vec<Merchant>>,(StatusCode,String)>{
+    let mut conn=pg.pool.get().unwrap();
 
     let login_info=login_infos::table
         .filter(login_infos::login_info_account.eq(query.login_account.clone()))
@@ -72,18 +69,14 @@ pub async fn get_merchants_by_login_account(State(pool):State<AxumPgPool>,  Quer
 }
 
 pub async fn get_barbers(
-    State(pool):State<AxumPgPool>,
+    State(pg):State<AxumPg>,
     Query(search):Query<Search>, 
-    auth: AuthSession<AxumPgPool, AxumPgPool,User>,
+    auth: AuthSession<AxumPg, AxumPg,User>,
 )->Result<Json<Vec<BarberResponse>>,(StatusCode,String)>{
-    //检查登录
-    let _=auth.identity.as_ref().ok_or((StatusCode::UNAUTHORIZED,"no login".to_string()))?;
-
-    //检查权限
-    auth.require_permissions(vec![authorization_policy::MERCHANT_ADMINISTRATOR])
-        .map_err(|_|(StatusCode::INTERNAL_SERVER_ERROR,"no permission".to_string()))?;
+    //检查登录&权限
+    auth.require_permissions(vec![authorization_policy::MERCHANT_ADMINISTRATOR]).map_err(|e|(StatusCode::UNAUTHORIZED,e.to_string()))?;
     
-    let mut conn=pool.pool.get().unwrap();//TODO error
+    let mut conn=pg.pool.get().unwrap();
 
     let merchant_id=serde_json::from_str::<Uuid>(auth.axum_session.lock().unwrap().get_data(constant::MERCHANT_ID)).unwrap();
 
@@ -112,25 +105,27 @@ pub async fn get_barbers(
 #[derive(Deserialize)]
 pub struct BarberAddRequest{
     pub cellphone:Option<String>,
+
+    #[serde(rename ="realName")]
     pub real_name:Option<String>,
+
     pub email:Option<String>,
+
     pub password:String,
+
+    #[serde(rename ="permissionCodes")]
     pub permission_codes:Vec<String>,
 }
 
 pub async fn add_barber(
-    State(pool):State<AxumPgPool>,
-    auth: AuthSession<AxumPgPool, AxumPgPool,User>,
+    State(pg):State<AxumPg>,
+    auth: AuthSession<AxumPg, AxumPg,User>,
     Json(req): Json<BarberAddRequest>
 )->Result<Json<BarberResponse>,(StatusCode,String)>{
-    //检查登录
-    let _=auth.identity.as_ref().ok_or((StatusCode::UNAUTHORIZED,"no login".to_string()))?;
-
-    //检查权限
-    auth.require_permissions(vec![authorization_policy::MERCHANT_ADMINISTRATOR])
-        .map_err(|_|(StatusCode::INTERNAL_SERVER_ERROR,"no permission".to_string()))?;
+    //检查登录&权限
+    auth.require_permissions(vec![authorization_policy::MERCHANT_ADMINISTRATOR]).map_err(|e|(StatusCode::UNAUTHORIZED,e.to_string()))?;
     
-    let mut conn=pool.pool.get().unwrap();//TODO error
+    let mut conn=pg.pool.get().unwrap();
     
     let merchant_id=serde_json::from_str::<Uuid>(auth.axum_session.lock().unwrap().get_data(constant::MERCHANT_ID)).unwrap();
 
@@ -355,18 +350,14 @@ pub async fn add_barber(
 }
 
 pub async fn delete_barber(
-    State(pool):State<AxumPgPool>,
+    State(pg):State<AxumPg>,
     Path(barber_id):Path<Uuid>, 
-    auth: AuthSession<AxumPgPool, AxumPgPool,User>,
+    auth: AuthSession<AxumPg, AxumPg,User>,
 )->Result<(),(StatusCode,String)>{
-    //检查登录
-    let _=auth.identity.as_ref().ok_or((StatusCode::UNAUTHORIZED,"no login".to_string()))?;
-
-    //检查权限
-    auth.require_permissions(vec![authorization_policy::MERCHANT_ADMINISTRATOR])
-        .map_err(|_|(StatusCode::INTERNAL_SERVER_ERROR,"no permission".to_string()))?;
+    //检查登录&权限
+    auth.require_permissions(vec![authorization_policy::MERCHANT_ADMINISTRATOR]).map_err(|e|(StatusCode::UNAUTHORIZED,e.to_string()))?;
     
-    let mut conn=pool.pool.get().unwrap();//TODO error
+    let mut conn=pg.pool.get().unwrap();
 
     diesel::update(
         barbers::table
@@ -390,25 +381,27 @@ pub async fn delete_barber(
 #[derive(Deserialize)]
 pub struct BarberEditRequest{
     pub cellphone:Option<String>,
+
+    #[serde(rename ="realName")]
     pub real_name:Option<String>,
+
     pub email:Option<String>,
+
+    #[serde(rename ="permissionCodes")]
     pub permission_codes:Vec<String>,
 }
 
 pub async fn update_barber(
-    State(pool):State<AxumPgPool>,
+    State(pg):State<AxumPg>,
     Path(barber_id):Path<Uuid>, 
-    auth: AuthSession<AxumPgPool, AxumPgPool,User>,
+    auth: AuthSession<AxumPg, AxumPg,User>,
     Json(req): Json<BarberEditRequest>
 )->Result<(),(StatusCode,String)>{
-    //检查登录
-    let _=auth.identity.as_ref().ok_or((StatusCode::UNAUTHORIZED,"no login".to_string()))?;
+    //检查登录&权限
+    auth.require_permissions(vec![authorization_policy::MERCHANT_ADMINISTRATOR]).map_err(|e|(StatusCode::UNAUTHORIZED,e.to_string()))?;
 
-    //检查权限
-    auth.require_permissions(vec![authorization_policy::MERCHANT_ADMINISTRATOR])
-        .map_err(|_|(StatusCode::INTERNAL_SERVER_ERROR,"no permission".to_string()))?;
+    let mut conn=pg.pool.get().unwrap();
 
-    let mut conn=pool.pool.get().unwrap();//TODO error
     let merchant_id=serde_json::from_str::<Uuid>(auth.axum_session.lock().unwrap().get_data(constant::MERCHANT_ID)).unwrap();
     
     if req.cellphone.is_none()&&req.email.is_none(){
@@ -444,11 +437,11 @@ pub async fn update_barber(
     let mut cellphone_login_info=None;
     if req.cellphone.is_some(){
         cellphone_login_info=login_infos::table
-        .filter(login_infos::enabled.eq(true))
-        .filter(login_infos::login_info_type.eq("Cellphone"))
-        .filter(login_infos::login_info_account.eq(req.cellphone.clone().unwrap()))
-        .get_result::<LoginInfo>(&mut *conn)
-        .ok();
+            .filter(login_infos::enabled.eq(true))
+            .filter(login_infos::login_info_type.eq("Cellphone"))
+            .filter(login_infos::login_info_account.eq(req.cellphone.clone().unwrap()))
+            .get_result::<LoginInfo>(&mut *conn)
+            .ok();
         if let Some(login_info)=cellphone_login_info.as_ref(){
             if login_info.user_id!=barber.user_id{
                 return Err((StatusCode::BAD_REQUEST,"该手机号已被其他用户使用".to_string())); //TODO 添加后验证email有效性
@@ -468,11 +461,11 @@ pub async fn update_barber(
                 update_time: Local::now(),
             };
             diesel::insert_into(login_infos::table)
-            .values(&login_info)
-            .execute(&mut *conn).map_err(|e|{
-                tracing::error!("{}",e.to_string());
-                (StatusCode::INTERNAL_SERVER_ERROR,e.to_string())
-            })?;
+                .values(&login_info)
+                .execute(&mut *conn).map_err(|e|{
+                    tracing::error!("{}",e.to_string());
+                    (StatusCode::INTERNAL_SERVER_ERROR,e.to_string())
+                })?;
         }
     } 
 
@@ -522,11 +515,11 @@ pub async fn update_barber(
         let mut permission_ids=permissions.iter().map(|p|p.permission_id).collect::<Vec<_>>();
         if !permissions.into_iter().any(|p|p.permission_code==permission_code){
             let permission_id=permissions::table
-            .filter(permissions::permission_code.eq(permission_code)) 
-            .filter(permissions::enabled.eq(true))
-            .select(permissions::permission_id)
-            .get_result::<Uuid>(&mut *conn)
-            .unwrap();
+                .filter(permissions::permission_code.eq(permission_code)) 
+                .filter(permissions::enabled.eq(true))
+                .select(permissions::permission_id)
+                .get_result::<Uuid>(&mut *conn)
+                .unwrap();
 
             permission_ids.push(permission_id);
 
@@ -553,41 +546,40 @@ pub async fn update_barber(
 pub struct BarberEditResponse{
     #[serde(flatten)]
     pub barber:Barber,
+
+    #[serde(rename ="permissionCodes")]
     pub permission_codes:Vec<String>,
 }
 
 pub async fn get_barber(
-    State(pool):State<AxumPgPool>,
+    State(pg):State<AxumPg>,
     Path(barber_id):Path<Uuid>, 
-    auth: AuthSession<AxumPgPool, AxumPgPool,User>,
+    auth: AuthSession<AxumPg, AxumPg,User>,
 )->Result<Json<BarberEditResponse>,(StatusCode,String)>{
-    //检查登录
-    let _=auth.identity.as_ref().ok_or((StatusCode::UNAUTHORIZED,"no login".to_string()))?;
+    //检查登录&权限
+    auth.require_permissions(vec![authorization_policy::MERCHANT_ADMINISTRATOR]).map_err(|e|(StatusCode::UNAUTHORIZED,e.to_string()))?;
 
-    //检查权限
-    auth.require_permissions(vec![authorization_policy::MERCHANT_ADMINISTRATOR])
-        .map_err(|_|(StatusCode::INTERNAL_SERVER_ERROR,"no permission".to_string()))?;
+    let mut conn=pg.pool.get().unwrap();
 
-    let mut conn=pool.pool.get().unwrap();//TODO error  
     let merchant_id=serde_json::from_str::<Uuid>(auth.axum_session.lock().unwrap().get_data(constant::MERCHANT_ID)).unwrap();
 
     let (barber,user)=barbers::table.inner_join(users::table.on(barbers::user_id.eq(users::user_id)))
-    .filter(users::enabled.eq(true))
-    .filter(barbers::barber_id.eq(barber_id))
-    .filter(barbers::merchant_id.eq(merchant_id))
-    .filter(barbers::enabled.eq(true))
-    .get_result::<(Barber,User)>(&mut *conn)
-    .map_err(|e|{
-        tracing::error!("{}",e.to_string());
-        (StatusCode::INTERNAL_SERVER_ERROR,e.to_string())
-    })?;
+        .filter(users::enabled.eq(true))
+        .filter(barbers::barber_id.eq(barber_id))
+        .filter(barbers::merchant_id.eq(merchant_id))
+        .filter(barbers::enabled.eq(true))
+        .get_result::<(Barber,User)>(&mut *conn)
+        .map_err(|e|{
+            tracing::error!("{}",e.to_string());
+            (StatusCode::INTERNAL_SERVER_ERROR,e.to_string())
+        })?;
 
     let permission_codes=permissions::table
-            .filter(permissions::permission_id.eq_any(serde_json::from_str::<Vec<Uuid>>(&user.permissions).unwrap())) 
-            .filter(permissions::enabled.eq(true))
-            .select(permissions::permission_code)
-            .get_results::<String>(&mut *conn)
-            .unwrap();
+        .filter(permissions::permission_id.eq_any(serde_json::from_str::<Vec<Uuid>>(&user.permissions).unwrap())) 
+        .filter(permissions::enabled.eq(true))
+        .select(permissions::permission_code)
+        .get_results::<String>(&mut *conn)
+        .unwrap();
 
     let res= BarberEditResponse{
         barber,

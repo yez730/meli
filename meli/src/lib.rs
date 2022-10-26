@@ -1,6 +1,6 @@
 pub mod models;
 pub mod schema;
-pub mod axum_pg_pool;
+pub mod axum_pg;
 pub mod utils;
 pub mod authorization_policy;
 pub mod handlers;
@@ -246,8 +246,7 @@ mod test{
     #[test]
     #[ignore]
     fn test3(){
-
-        assert!(regex::Regex::new(regex_constants::CellphoneRegexString).unwrap().is_match("14764197590"));
+        assert!(regex::Regex::new(regex_constants::CELLPHONE_REGEX_STRING).unwrap().is_match("14764197590"));
         // let input1=Input3{a:"123".into(),b:Some(NaiveDate::from_ymd(2022, 4, 18))};
         // let json1=serde_json::to_string(&input1).unwrap(); //2022-04-18
         // assert_eq!(json1,"");

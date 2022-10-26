@@ -6,14 +6,14 @@ use bigdecimal::BigDecimal;
 use uuid::Uuid;
 use crate::{
     schema::*,
-    models::{ServiceType, NewServiceType, Barber}, authorization_policy, constant
+    models::{ServiceType, NewServiceType}, authorization_policy, constant
 };
 use diesel::{
     prelude::*, // for .filter
     select, 
     dsl::exists,
 }; 
-use crate::{models::User, axum_pg_pool::AxumPgPool};
+use crate::{models::User, axum_pg::AxumPg};
 use super::{PaginatedListRequest,PaginatedListResponse, Search};
 
 #[derive(Deserialize)]
@@ -25,19 +25,15 @@ pub struct ServiceTypeRequest{
 }
 
 pub async fn get_service_types(
-    State(pool):State<AxumPgPool>,
+    State(pg):State<AxumPg>,
     Query(params):Query<PaginatedListRequest>, 
     Query(search):Query<Search>, 
-    auth: AuthSession<AxumPgPool, AxumPgPool,User>,
+    auth: AuthSession<AxumPg, AxumPg,User>,
 )->Result<Json<PaginatedListResponse<ServiceType>>,(StatusCode,String)>{
-    //检查登录
-    let _=auth.identity.as_ref().ok_or((StatusCode::UNAUTHORIZED,"no login".to_string()))?;
-
-    //检查权限
-    auth.require_permissions(vec![authorization_policy::BARBER_BASE])
-        .map_err(|_|(StatusCode::INTERNAL_SERVER_ERROR,"no permission".to_string()))?;
+    //检查登录&权限
+    auth.require_permissions(vec![authorization_policy::BARBER_BASE]).map_err(|e|(StatusCode::UNAUTHORIZED,e.to_string()))?;
     
-    let mut conn=pool.pool.get().unwrap();//TODO error
+    let mut conn=pg.pool.get().unwrap();
 
     let merchant_id=serde_json::from_str::<Uuid>(auth.axum_session.lock().unwrap().get_data(constant::MERCHANT_ID)).unwrap();
 
@@ -73,18 +69,14 @@ pub async fn get_service_types(
 }
 
 pub async fn add_service_type(
-    State(pool):State<AxumPgPool>,
-    auth: AuthSession<AxumPgPool, AxumPgPool,User>,
+    State(pg):State<AxumPg>,
+    auth: AuthSession<AxumPg, AxumPg,User>,
     Json(req): Json<ServiceTypeRequest>
 )->Result<Json<ServiceType>,(StatusCode,String)>{
-    //检查登录
-    let _=auth.identity.as_ref().ok_or((StatusCode::UNAUTHORIZED,"no login".to_string()))?;
-
-    //检查权限
-    auth.require_permissions(vec![authorization_policy::BARBER_BASE])
-        .map_err(|_|(StatusCode::INTERNAL_SERVER_ERROR,"no permission".to_string()))?;
+    //检查登录&权限
+    auth.require_permissions(vec![authorization_policy::BARBER_BASE]).map_err(|e|(StatusCode::UNAUTHORIZED,e.to_string()))?;
     
-    let mut conn=pool.pool.get().unwrap();//TODO error
+    let mut conn=pg.pool.get().unwrap();
     
     let merchant_id=serde_json::from_str::<Uuid>(auth.axum_session.lock().unwrap().get_data(constant::MERCHANT_ID)).unwrap();
 
@@ -111,36 +103,32 @@ pub async fn add_service_type(
             data: None,
         };
         diesel::insert_into(service_types::table)
-        .values(&new_service_type)
-        .execute(&mut *conn).map_err(|e|{
-            tracing::error!("{}",e.to_string());
-            (StatusCode::INTERNAL_SERVER_ERROR,e.to_string())
-        })?;
+            .values(&new_service_type)
+            .execute(&mut *conn).map_err(|e|{
+                tracing::error!("{}",e.to_string());
+                (StatusCode::INTERNAL_SERVER_ERROR,e.to_string())
+            })?;
 
         let service_type=service_types::table
-        .filter(service_types::enabled.eq(true))
-        .filter(service_types::service_type_id.eq(new_service_type.service_type_id))
-        .filter(service_types::merchant_id.eq(merchant_id))
-        .get_result::<ServiceType>(&mut *conn)
-        .map_err(|e|(StatusCode::INTERNAL_SERVER_ERROR,e.to_string()))?;
+            .filter(service_types::enabled.eq(true))
+            .filter(service_types::service_type_id.eq(new_service_type.service_type_id))
+            .filter(service_types::merchant_id.eq(merchant_id))
+            .get_result::<ServiceType>(&mut *conn)
+            .map_err(|e|(StatusCode::INTERNAL_SERVER_ERROR,e.to_string()))?;
         
         Ok(Json(service_type))
     }
 }
 
 pub async fn delete_service_type(
-    State(pool):State<AxumPgPool>,
+    State(pg):State<AxumPg>,
     Path(service_type_id):Path<Uuid>, 
-    auth: AuthSession<AxumPgPool, AxumPgPool,User>,
+    auth: AuthSession<AxumPg, AxumPg,User>,
 )->Result<(),(StatusCode,String)>{
-    //检查登录
-    let _=auth.identity.as_ref().ok_or((StatusCode::UNAUTHORIZED,"no login".to_string()))?;
-
-    //检查权限
-    auth.require_permissions(vec![authorization_policy::BARBER_BASE])
-        .map_err(|_|(StatusCode::INTERNAL_SERVER_ERROR,"no permission".to_string()))?;
+    //检查登录&权限
+    auth.require_permissions(vec![authorization_policy::BARBER_BASE]).map_err(|e|(StatusCode::UNAUTHORIZED,e.to_string()))?;
     
-    let mut conn=pool.pool.get().unwrap();//TODO error
+    let mut conn=pg.pool.get().unwrap();
 
     let merchant_id=serde_json::from_str::<Uuid>(auth.axum_session.lock().unwrap().get_data(constant::MERCHANT_ID)).unwrap();
 
@@ -167,23 +155,19 @@ pub async fn delete_service_type(
 }
 
 pub async fn update_service_type(
-    State(pool):State<AxumPgPool>,
+    State(pg):State<AxumPg>,
     Path(service_type_id):Path<Uuid>, 
-    auth: AuthSession<AxumPgPool, AxumPgPool,User>,
+    auth: AuthSession<AxumPg, AxumPg,User>,
     Json(req): Json<ServiceTypeRequest>
 )->Result<(),(StatusCode,String)>{
-    //检查登录
-    let _=auth.identity.as_ref().ok_or((StatusCode::UNAUTHORIZED,"no login".to_string()))?;
-
-    //检查权限
-    auth.require_permissions(vec![authorization_policy::BARBER_BASE])
-        .map_err(|_|(StatusCode::INTERNAL_SERVER_ERROR,"no permission".to_string()))?;
+    //检查登录&权限
+    auth.require_permissions(vec![authorization_policy::BARBER_BASE]).map_err(|e|(StatusCode::UNAUTHORIZED,e.to_string()))?;
    
-    let mut conn=pool.pool.get().unwrap();//TODO error
+    let mut conn=pg.pool.get().unwrap();
 
     let merchant_id=serde_json::from_str::<Uuid>(auth.axum_session.lock().unwrap().get_data(constant::MERCHANT_ID)).unwrap();
 
-    let num=diesel::update(
+    diesel::update(
         service_types::table
         .filter(service_types::service_type_id.eq(service_type_id))
         .filter(service_types::merchant_id.eq(merchant_id))
@@ -200,27 +184,19 @@ pub async fn update_service_type(
         tracing::error!("{}",e.to_string());
         (StatusCode::INTERNAL_SERVER_ERROR,e.to_string())
     })?;
-
-    if num !=1 {
-        tracing::error!("update_service_type affected num: {}",num);
-    }
     
     Ok(())
 }
 
 pub async fn get_service_type(
-    State(pool):State<AxumPgPool>,
+    State(pg):State<AxumPg>,
     Path(service_type_id):Path<Uuid>, 
-    auth: AuthSession<AxumPgPool, AxumPgPool,User>,
+    auth: AuthSession<AxumPg, AxumPg,User>,
 )->Result<Json<ServiceType>,(StatusCode,String)>{
-    //检查登录
-    let _=auth.identity.as_ref().ok_or((StatusCode::UNAUTHORIZED,"no login".to_string()))?;
+    //检查登录&权限
+    auth.require_permissions(vec![authorization_policy::BARBER_BASE]).map_err(|e|(StatusCode::UNAUTHORIZED,e.to_string()))?;
 
-    //检查权限
-    auth.require_permissions(vec![authorization_policy::BARBER_BASE])
-        .map_err(|_|(StatusCode::INTERNAL_SERVER_ERROR,"no permission".to_string()))?;
-
-    let mut conn=pool.pool.get().unwrap();//TODO error  
+    let mut conn=pg.pool.get().unwrap();
     
     let merchant_id=serde_json::from_str::<Uuid>(auth.axum_session.lock().unwrap().get_data(constant::MERCHANT_ID)).unwrap();
 

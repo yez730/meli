@@ -9,15 +9,21 @@ use crate::{
     models::{Member, NewUser, NewMember,  NewMerchantMember, MerchantMember, NewRechargeRecord, Barber, LoginInfo, NewLoginInfo}, authorization_policy, constant
 };
 use diesel::prelude::*; 
-use crate::{models::User, axum_pg_pool::AxumPgPool};
+use crate::{models::User, axum_pg::AxumPg};
 use super::{PaginatedListRequest,PaginatedListResponse, Search};
 
 #[derive(Deserialize)]
 pub struct MemberRequest{
     pub cellphone:String,
+
+    #[serde(rename ="realName")]
     pub real_name:Option<String>,
+
     pub gender:Option<String>,
+
+    #[serde(rename ="birthDay")]
     pub birth_day:Option<NaiveDate>,
+
     pub remark:Option<String>,
 }
 
@@ -25,24 +31,21 @@ pub struct MemberRequest{
 pub struct MemberResponse{
     #[serde(flatten)]
     pub member:Member,
+
     #[serde(flatten)]
     pub balance:MerchantMember,
 }
 
 pub async fn get_members(
-    State(pool):State<AxumPgPool>,
+    State(pg):State<AxumPg>,
     Query(params):Query<PaginatedListRequest>, 
     Query(search):Query<Search>, 
-    auth: AuthSession<AxumPgPool, AxumPgPool,User>,
+    auth: AuthSession<AxumPg, AxumPg,User>,
 )->Result<Json<PaginatedListResponse<MemberResponse>>,(StatusCode,String)>{
-    //检查登录
-    let _=auth.identity.as_ref().ok_or((StatusCode::UNAUTHORIZED,"no login".to_string()))?;
-
-    //检查权限
-    auth.require_permissions(vec![authorization_policy::BARBER_BASE])
-        .map_err(|_|(StatusCode::INTERNAL_SERVER_ERROR,"no permission".to_string()))?;
+    //检查登录&权限
+    auth.require_permissions(vec![authorization_policy::BARBER_BASE]).map_err(|e|(StatusCode::UNAUTHORIZED,e.to_string()))?;
     
-    let mut conn=pool.pool.get().unwrap();
+    let mut conn=pg.pool.get().unwrap();
     
     let merchant_id=serde_json::from_str::<Uuid>(auth.axum_session.lock().unwrap().get_data(constant::MERCHANT_ID)).unwrap();
 
@@ -86,18 +89,14 @@ pub async fn get_members(
 }
 
 pub async fn add_member(
-    State(pool):State<AxumPgPool>,
-    auth: AuthSession<AxumPgPool, AxumPgPool,User>,
+    State(pg):State<AxumPg>,
+    auth: AuthSession<AxumPg, AxumPg,User>,
     Json(req): Json<MemberRequest>
 )->Result<Json<MemberResponse>,(StatusCode,String)>{
-    //检查登录
-    let _=auth.identity.as_ref().ok_or((StatusCode::UNAUTHORIZED,"no login".to_string()))?;
-
-    //检查权限
-    auth.require_permissions(vec![authorization_policy::BARBER_BASE])
-        .map_err(|_|(StatusCode::INTERNAL_SERVER_ERROR,"no permission".to_string()))?;
+    //检查登录&权限
+    auth.require_permissions(vec![authorization_policy::BARBER_BASE]).map_err(|e|(StatusCode::UNAUTHORIZED,e.to_string()))?;
     
-    let mut conn=pool.pool.get().unwrap();//TODO error
+    let mut conn=pg.pool.get().unwrap();
     
     let merchant_id=serde_json::from_str::<Uuid>(auth.axum_session.lock().unwrap().get_data(constant::MERCHANT_ID)).unwrap();
 
@@ -238,18 +237,14 @@ pub async fn add_member(
 }
 
 pub async fn delete_member(
-    State(pool):State<AxumPgPool>,
+    State(pg):State<AxumPg>,
     Path(member_id):Path<Uuid>, 
-    auth: AuthSession<AxumPgPool, AxumPgPool,User>,
+    auth: AuthSession<AxumPg, AxumPg,User>,
 )->Result<(),(StatusCode,String)>{
-    //检查登录
-    let _=auth.identity.as_ref().ok_or((StatusCode::UNAUTHORIZED,"no login".to_string()))?;
-
-    //检查权限
-    auth.require_permissions(vec![authorization_policy::BARBER_BASE])
-        .map_err(|_|(StatusCode::INTERNAL_SERVER_ERROR,"no permission".to_string()))?;
+    //检查登录&权限
+    auth.require_permissions(vec![authorization_policy::BARBER_BASE]).map_err(|e|(StatusCode::UNAUTHORIZED,e.to_string()))?;
     
-    let mut conn=pool.pool.get().unwrap();//TODO error
+    let mut conn=pg.pool.get().unwrap();
 
     let merchant_id=serde_json::from_str::<Uuid>(auth.axum_session.lock().unwrap().get_data(constant::MERCHANT_ID)).unwrap();
 
@@ -288,19 +283,15 @@ pub async fn delete_member(
 
 // TODO 不允许商家
 pub async fn update_member(
-    State(pool):State<AxumPgPool>,
+    State(pg):State<AxumPg>,
     Path(member_id):Path<Uuid>, 
-    auth: AuthSession<AxumPgPool, AxumPgPool,User>,
+    auth: AuthSession<AxumPg, AxumPg,User>,
     Json(req): Json<MemberRequest>
 )->Result<(),(StatusCode,String)>{
-    //检查登录
-    let _=auth.identity.as_ref().ok_or((StatusCode::UNAUTHORIZED,"no login".to_string()))?;
-
-    //检查权限
-    auth.require_permissions(vec![authorization_policy::BARBER_BASE])
-        .map_err(|_|(StatusCode::INTERNAL_SERVER_ERROR,"no permission".to_string()))?;
+    //检查登录&权限
+    auth.require_permissions(vec![authorization_policy::BARBER_BASE]).map_err(|e|(StatusCode::UNAUTHORIZED,e.to_string()))?;
    
-    let mut conn=pool.pool.get().unwrap();//TODO error
+    let mut conn=pg.pool.get().unwrap();
 
     let member=members::table
         .filter(members::member_id.eq(member_id))
@@ -355,18 +346,14 @@ pub async fn update_member(
 }
 
 pub async fn get_member(
-    State(pool):State<AxumPgPool>,
+    State(pg):State<AxumPg>,
     Path(member_id):Path<Uuid>, 
-    auth: AuthSession<AxumPgPool, AxumPgPool,User>,
+    auth: AuthSession<AxumPg, AxumPg,User>,
 )->Result<Json<MemberResponse>,(StatusCode,String)>{
-    //检查登录
-    let _=auth.identity.as_ref().ok_or((StatusCode::UNAUTHORIZED,"no login".to_string()))?;
+    //检查登录&权限
+    auth.require_permissions(vec![authorization_policy::BARBER_BASE]).map_err(|e|(StatusCode::UNAUTHORIZED,e.to_string()))?;
 
-    //检查权限
-    auth.require_permissions(vec![authorization_policy::BARBER_BASE])
-        .map_err(|_|(StatusCode::INTERNAL_SERVER_ERROR,"no permission".to_string()))?;
-
-    let mut conn=pool.pool.get().unwrap();//TODO error  
+    let mut conn=pg.pool.get().unwrap();
     
     let merchant_id=serde_json::from_str::<Uuid>(auth.axum_session.lock().unwrap().get_data(constant::MERCHANT_ID)).unwrap();
 
@@ -388,19 +375,15 @@ pub struct RechargeRequest{
 }
 
 pub async fn recharge(
-    State(pool):State<AxumPgPool>,
-    auth: AuthSession<AxumPgPool, AxumPgPool,User>,
+    State(pg):State<AxumPg>,
+    auth: AuthSession<AxumPg, AxumPg,User>,
     Path(member_id):Path<Uuid>, 
     Json(req): Json<RechargeRequest>
 )->Result<(),(StatusCode,String)>{
-    //检查登录
-    let _=auth.identity.as_ref().ok_or((StatusCode::UNAUTHORIZED,"no login".to_string()))?;
-
-    //检查权限
-    auth.require_permissions(vec![authorization_policy::BARBER_BASE])
-        .map_err(|_|(StatusCode::INTERNAL_SERVER_ERROR,"no permission".to_string()))?;
+    //检查登录&权限
+    auth.require_permissions(vec![authorization_policy::BARBER_BASE]).map_err(|e|(StatusCode::UNAUTHORIZED,e.to_string()))?;
     
-    let mut conn=pool.pool.get().unwrap();//TODO error
+    let mut conn=pg.pool.get().unwrap();
     
     let merchant_id=serde_json::from_str::<Uuid>(auth.axum_session.lock().unwrap().get_data(constant::MERCHANT_ID)).unwrap();
 

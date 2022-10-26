@@ -1,12 +1,12 @@
 use async_trait::async_trait;
 use axum_session_authentication_middleware::{ user as auth_user,session::Authentication};
-use chrono::{Local, NaiveDate, NaiveTime};
+use chrono::{Local, NaiveDate};
 use diesel::prelude::*;
-use serde::{Serialize, Deserialize};
+use serde::Serialize;
 use uuid::Uuid;
 use bigdecimal::BigDecimal;
 
-use crate::{schema::*, axum_pg_pool::AxumPgPool, my_date_format};
+use crate::{schema::*, axum_pg::AxumPg, my_date_format};
 
 #[derive(Queryable,Clone, Debug)]
 pub struct User{
@@ -25,9 +25,9 @@ pub struct User{
 }
 
 #[async_trait]
-impl Authentication<User, AxumPgPool> for User{
-    fn load_identity(user_id:Uuid,pool:AxumPgPool) -> auth_user::Identity{
-        let mut conn=pool.pool.get().unwrap();//TODO error
+impl Authentication<User, AxumPg> for User{
+    fn load_identity(user_id:Uuid,pg:AxumPg) -> auth_user::Identity{
+        let mut conn=pg.pool.get().unwrap();//TODO error
 
         let user=users::table
             .filter(users::user_id.eq(user_id))
@@ -72,7 +72,6 @@ impl Authentication<User, AxumPgPool> for User{
                     update_time: p.update_time,
                     data: p.data,
             }).collect(),
-
         };
 
         identity
@@ -165,19 +164,29 @@ pub struct Member{
     #[serde(skip)]
     pub id: i64,
 
+    #[serde(rename ="userId")]
     pub user_id: Uuid,
+
+    #[serde(rename ="memberId")]
     pub member_id: Uuid,
+    
     pub cellphone:String,
+    
+    #[serde(rename ="realName")]
     pub real_name:Option<String>,
+
     pub gender:Option<String>,
+
+    #[serde(rename ="birthDay")]
     pub birth_day:Option<NaiveDate>,
 
     #[serde(skip)]
     pub enabled:bool,
 
-    #[serde(with = "my_date_format")]
+    #[serde(with = "my_date_format",rename ="createTime")]
     pub create_time: chrono::DateTime<Local>,
-    #[serde(with = "my_date_format")]
+
+    #[serde(with = "my_date_format",rename ="updateTime")]
     pub update_time: chrono::DateTime<Local>,
 
     #[serde(skip)]
@@ -207,7 +216,10 @@ pub struct NewMember<'a>{
 pub struct MerchantMember{
     #[serde(skip)]
     pub id: i64,
+
+    #[serde(rename ="merchantId")]
     pub merchant_id: Uuid,
+
     #[serde(skip)]
     pub member_id: Uuid,
 
@@ -216,9 +228,10 @@ pub struct MerchantMember{
     #[serde(skip)]
     pub enabled:bool,
     
-    #[serde(with = "my_date_format")]
+    #[serde(with = "my_date_format",rename ="createTime")]
     pub create_time: chrono::DateTime<Local>,
-    #[serde(with = "my_date_format")]
+
+    #[serde(with = "my_date_format",rename ="updateTime")]
     pub update_time: chrono::DateTime<Local>,
 
     #[serde(skip)]
@@ -237,23 +250,34 @@ pub struct NewMerchantMember<'a>{
     pub data: Option<&'a str>,
 }
 
-#[derive(Queryable,Serialize,Clone,Deserialize)]
+#[derive(Queryable,Serialize,Clone)]
 pub struct Barber{
     #[serde(skip)]
     pub id: i64,
+
+    #[serde(rename ="userId")]
     pub user_id: Uuid,
+    
+    #[serde(rename ="barberId")]
     pub barber_id: Uuid,
+    
+    #[serde(rename ="merchantId")]
     pub merchant_id: Uuid,
 
     pub cellphone:String,
+
     pub email:Option<String>,
+
+    #[serde(rename ="realName")]
     pub real_name:Option<String>,
 
     #[serde(skip)]
     pub enabled:bool,
-    #[serde(with = "my_date_format")]
+
+    #[serde(with = "my_date_format",rename ="createTime")]
     pub create_time: chrono::DateTime<Local>,
-    #[serde(with = "my_date_format")]
+    
+    #[serde(with = "my_date_format",rename ="updateTime")]
     pub update_time: chrono::DateTime<Local>,
 
     #[serde(skip)]
@@ -280,22 +304,32 @@ pub struct Merchant{
     #[serde(skip)]
     pub id: i64,
 
+    #[serde(rename ="merchantId")]
     pub merchant_id: Uuid,
+
+    #[serde(rename ="merchantName")]
     pub merchant_name:String,
+
+    #[serde(rename ="companyName")]
     pub company_name:Option<String>,
+
+    #[serde(rename ="credentialNo")]
     pub credential_no:Option<String>,
 
     #[serde(skip)]
     pub enabled:bool,
-    #[serde(with = "my_date_format")]
+
+    #[serde(with = "my_date_format",rename ="createTime")]
     pub create_time: chrono::DateTime<Local>,
-    #[serde(with = "my_date_format")]
+    
+    #[serde(with = "my_date_format",rename ="updateTime")]
     pub update_time: chrono::DateTime<Local>,
 
     #[serde(skip)]
     pub data: Option<String>,
 
     pub address:Option<String>,
+
     pub remark:Option<String>,
 }
 
@@ -365,17 +399,31 @@ pub struct NewPasswordLoginProvider<'a>{
 pub struct ServiceType{
     #[serde(skip)]
     pub id: i64,
+
+    #[serde(rename ="serviceTypeId")]
     pub service_type_id: Uuid,
+
+    #[serde(rename ="merchantId")]
     pub merchant_id: Uuid,
+
     pub name: String,
+
+    #[serde(rename ="estimatedDuration")]
     pub estimated_duration: i32,
+
+    #[serde(rename ="normalPrize")]
     pub normal_prize:BigDecimal,
+
+    #[serde(rename ="memberPrize")]
     pub member_prize:BigDecimal,
+
     #[serde(skip)]
     pub enabled:bool,
-    #[serde(with = "my_date_format")]
+
+    #[serde(with = "my_date_format",rename ="createTime")]
     pub create_time: chrono::DateTime<Local>,
-    #[serde(with = "my_date_format")]
+
+    #[serde(with = "my_date_format",rename ="updateTime")]
     pub update_time: chrono::DateTime<Local>,
 
     #[serde(skip)]
@@ -402,17 +450,28 @@ pub struct NewServiceType<'a>{
 pub struct RechargeRecord{
     #[serde(skip)]
     pub id: i64,
+
+    #[serde(rename ="rechargeRecordId")]
     pub recharge_record_id: Uuid,
+
+    #[serde(rename ="merchantId")]
     pub merchant_id: Uuid,
+
+    #[serde(rename ="memberId")]
     pub member_id: Uuid,
+
     pub amount:BigDecimal,
+
+    #[serde(rename ="barberId")]
     pub barber_id:Uuid,
 
     #[serde(skip)]
     pub enabled:bool,
-    #[serde(with = "my_date_format")]
+
+    #[serde(with = "my_date_format",rename ="createTime")]
     pub create_time: chrono::DateTime<Local>,
-    #[serde(with = "my_date_format")]
+    
+    #[serde(with = "my_date_format",rename ="updateTime")]
     pub update_time: chrono::DateTime<Local>,
 
     #[serde(skip)]
@@ -438,34 +497,49 @@ pub struct NewRechargeRecord<'a>{
 pub struct Order{
     #[serde(skip)]
     pub id: i64,
+
     #[serde(rename = "id")]
     pub order_id: Uuid,
+
+    #[serde(rename = "merchantId")]
     pub merchant_id: Uuid,
+
     #[serde(rename="start", with = "my_date_format")]
     pub start_time: chrono::DateTime<Local>,
+
     #[serde(rename="end",with = "my_date_format")]
     pub end_time: chrono::DateTime<Local>,
+    
     #[serde(skip)]
     pub consumer_type:String,  // walk-in / member
+    
     #[serde(skip)]
     pub member_id: Option<Uuid>,
+    
     #[serde(skip)]
     pub barber_id:Uuid,
+    
     #[serde(skip)]
     pub service_type_id:Uuid,
+    
     #[serde(skip)]
     pub status:String,
+    
     #[serde(skip)]
     pub payment_type:String, // member / cash
+    
     #[serde(skip)]
     pub amount:BigDecimal,
+    
     #[serde(skip)]
     pub remark:Option<String>,
 
     #[serde(skip)]
     pub enabled:bool,
+    
     #[serde(skip)]
     pub create_time: chrono::DateTime<Local>,
+    
     #[serde(skip)]
     pub update_time: chrono::DateTime<Local>,
 
