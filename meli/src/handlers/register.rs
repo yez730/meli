@@ -19,8 +19,12 @@ use super::barber::BarberResponse;
 
 #[derive(Deserialize)]
 pub struct RegisterMerchantRequest{
+    #[serde(rename="merchantName")]
     pub merchant_name:String,
+
+    #[serde(rename="loginAccount")]
     pub login_account:String,
+
     pub password:String,
 }
 

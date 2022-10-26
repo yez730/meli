@@ -35,7 +35,7 @@ pub async fn get_current_barber(
 
     let mut conn=pg.pool.get().unwrap();
     
-    let merchant_id=serde_json::from_str::<Uuid>(auth.axum_session.lock().unwrap().get_data(constant::MERCHANT_ID)).unwrap();
+    let merchant_id=Uuid::parse_str(auth.axum_session.lock().unwrap().get_data(constant::MERCHANT_ID)).unwrap();
     let user_id=auth.identity.unwrap().user_id;
 
     let barber=barbers::table
@@ -86,7 +86,7 @@ pub async fn update_info(
 
     let mut conn=pg.pool.get().unwrap();
 
-    let merchant_id=serde_json::from_str::<Uuid>(auth.axum_session.lock().unwrap().get_data(constant::MERCHANT_ID)).unwrap();
+    let merchant_id=Uuid::parse_str(auth.axum_session.lock().unwrap().get_data(constant::MERCHANT_ID)).unwrap();
     let user_id=auth.identity.unwrap().user_id;
 
     if req.old_password.is_some() && req.new_password.is_none(){
@@ -95,7 +95,7 @@ pub async fn update_info(
     
     let mut existed_email_login_info=None;
     if req.email.is_some(){
-        if EmailAddress::is_valid(req.email.as_ref().unwrap()){
+        if !EmailAddress::is_valid(req.email.as_ref().unwrap()){
             return Err((StatusCode::BAD_REQUEST,"邮箱格式不正确".to_string()));
         } 
         
@@ -114,7 +114,7 @@ pub async fn update_info(
 
     let mut existed_cellphone_login_info=None;
     if req.cellphone.is_some(){
-        if Regex::new(CELLPHONE_REGEX_STRING).unwrap().is_match(req.cellphone.as_ref().unwrap()){
+        if !Regex::new(CELLPHONE_REGEX_STRING).unwrap().is_match(req.cellphone.as_ref().unwrap()){
             return Err((StatusCode::BAD_REQUEST,"手机号码格式不正确".to_string()));
         }
 

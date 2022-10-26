@@ -25,7 +25,7 @@ pub async fn get_current_merchant(State(pg):State<AxumPg>,
 
     let mut conn=pg.pool.get().unwrap();
     
-    let merchant_id=serde_json::from_str::<Uuid>(auth.axum_session.lock().unwrap().get_data(constant::MERCHANT_ID)).unwrap();
+    let merchant_id=Uuid::parse_str(auth.axum_session.lock().unwrap().get_data(constant::MERCHANT_ID)).unwrap();
 
     let merchant=merchants::table
         .filter(merchants::enabled.eq(true))
@@ -77,8 +77,7 @@ pub async fn get_barbers(
     auth.require_permissions(vec![authorization_policy::MERCHANT_ADMINISTRATOR]).map_err(|e|(StatusCode::UNAUTHORIZED,e.to_string()))?;
     
     let mut conn=pg.pool.get().unwrap();
-
-    let merchant_id=serde_json::from_str::<Uuid>(auth.axum_session.lock().unwrap().get_data(constant::MERCHANT_ID)).unwrap();
+    let merchant_id=Uuid::parse_str(auth.axum_session.lock().unwrap().get_data(constant::MERCHANT_ID)).unwrap();
 
     let mut query=barbers::table
         .inner_join(merchants::table.on(barbers::merchant_id.eq(merchants::merchant_id)))
@@ -102,30 +101,17 @@ pub async fn get_barbers(
     Ok(Json(data))
 }
 
-#[derive(Deserialize)]
-pub struct BarberAddRequest{
-    pub cellphone:Option<String>,
-
-    #[serde(rename ="realName")]
-    pub real_name:Option<String>,
-
-    pub email:Option<String>,
-
-    #[serde(rename ="permissionCodes")]
-    pub permission_codes:Vec<String>,
-}
-
 pub async fn add_barber(
     State(pg):State<AxumPg>,
     auth: AuthSession<AxumPg, AxumPg,User>,
-    Json(req): Json<BarberAddRequest>
+    Json(req): Json<BarberEditRequest>
 )->Result<Json<BarberResponse>,(StatusCode,String)>{
     //检查登录&权限
     auth.require_permissions(vec![authorization_policy::MERCHANT_ADMINISTRATOR]).map_err(|e|(StatusCode::UNAUTHORIZED,e.to_string()))?;
     
     let mut conn=pg.pool.get().unwrap();
     
-    let merchant_id=serde_json::from_str::<Uuid>(auth.axum_session.lock().unwrap().get_data(constant::MERCHANT_ID)).unwrap();
+    let merchant_id=Uuid::parse_str(auth.axum_session.lock().unwrap().get_data(constant::MERCHANT_ID)).unwrap();
 
     if req.cellphone.is_none()&&req.email.is_none(){
         return Err((StatusCode::BAD_REQUEST,"手机号码和邮箱不能同时为空".to_string()));
@@ -133,7 +119,7 @@ pub async fn add_barber(
 
     let mut existed_email_login_info_and_user=None;
     if req.email.is_some(){
-        if EmailAddress::is_valid(req.email.as_ref().unwrap()){
+        if !EmailAddress::is_valid(req.email.as_ref().unwrap()){
             return Err((StatusCode::BAD_REQUEST,"邮箱格式不正确".to_string()));
         } 
 
@@ -162,7 +148,7 @@ pub async fn add_barber(
 
     let mut existed_cellphone_login_info_and_user=None;
     if req.cellphone.is_some(){
-        if Regex::new(CELLPHONE_REGEX_STRING).unwrap().is_match(req.cellphone.as_ref().unwrap()){
+        if !Regex::new(CELLPHONE_REGEX_STRING).unwrap().is_match(req.cellphone.as_ref().unwrap()){
             return Err((StatusCode::BAD_REQUEST,"手机号码格式不正确".to_string()));
         }
         
@@ -353,7 +339,7 @@ pub async fn delete_barber(
     
     let mut conn=pg.pool.get().unwrap();
 
-    let merchant_id=serde_json::from_str::<Uuid>(auth.axum_session.lock().unwrap().get_data(constant::MERCHANT_ID)).unwrap();
+    let merchant_id=Uuid::parse_str(auth.axum_session.lock().unwrap().get_data(constant::MERCHANT_ID)).unwrap();
 
     let _existed=barbers::table
         .filter(barbers::enabled.eq(true))
@@ -406,7 +392,7 @@ pub async fn update_barber(
 
     let mut conn=pg.pool.get().unwrap();
 
-    let merchant_id=serde_json::from_str::<Uuid>(auth.axum_session.lock().unwrap().get_data(constant::MERCHANT_ID)).unwrap();
+    let merchant_id=Uuid::parse_str(auth.axum_session.lock().unwrap().get_data(constant::MERCHANT_ID)).unwrap();
     
     if req.cellphone.is_none()&&req.email.is_none(){
         return Err((StatusCode::BAD_REQUEST,"手机号码和邮箱不能同时为空".to_string()));
@@ -424,6 +410,10 @@ pub async fn update_barber(
 
     let mut email_login_info=None;
     if req.email.is_some(){
+        if !EmailAddress::is_valid(req.email.as_ref().unwrap()){
+            return Err((StatusCode::BAD_REQUEST,"邮箱格式不正确".to_string()));
+        } 
+
         email_login_info=login_infos::table
             .filter(login_infos::enabled.eq(true))
             .filter(login_infos::login_info_type.eq("Email"))
@@ -439,6 +429,10 @@ pub async fn update_barber(
 
     let mut cellphone_login_info=None;
     if req.cellphone.is_some(){
+        if !Regex::new(CELLPHONE_REGEX_STRING).unwrap().is_match(req.cellphone.as_ref().unwrap()){
+            return Err((StatusCode::BAD_REQUEST,"手机号码格式不正确".to_string()));
+        }
+
         cellphone_login_info=login_infos::table
             .filter(login_infos::enabled.eq(true))
             .filter(login_infos::login_info_type.eq("Cellphone"))
@@ -561,7 +555,7 @@ pub async fn get_barber(
 
     let mut conn=pg.pool.get().unwrap();
 
-    let merchant_id=serde_json::from_str::<Uuid>(auth.axum_session.lock().unwrap().get_data(constant::MERCHANT_ID)).unwrap();
+    let merchant_id=Uuid::parse_str(auth.axum_session.lock().unwrap().get_data(constant::MERCHANT_ID)).unwrap();
 
     let (barber,user)=barbers::table.inner_join(users::table.on(barbers::user_id.eq(users::user_id)))
         .filter(users::enabled.eq(true))

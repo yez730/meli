@@ -41,7 +41,7 @@ pub async fn get_service_types(
     
     let mut conn=pg.pool.get().unwrap();
 
-    let merchant_id=serde_json::from_str::<Uuid>(auth.axum_session.lock().unwrap().get_data(constant::MERCHANT_ID)).unwrap();
+    let merchant_id=Uuid::parse_str(auth.axum_session.lock().unwrap().get_data(constant::MERCHANT_ID)).unwrap();
 
     let fn_get_service_types_query=||{
         let mut query=service_types::table
@@ -87,7 +87,7 @@ pub async fn add_service_type(
     
     let mut conn=pg.pool.get().unwrap();
     
-    let merchant_id=serde_json::from_str::<Uuid>(auth.axum_session.lock().unwrap().get_data(constant::MERCHANT_ID)).unwrap();
+    let merchant_id=Uuid::parse_str(auth.axum_session.lock().unwrap().get_data(constant::MERCHANT_ID)).unwrap();
 
     let existed=select(exists(service_types::table
         .filter(service_types::enabled.eq(true))
@@ -137,7 +137,7 @@ pub async fn delete_service_type(
     
     let mut conn=pg.pool.get().unwrap();
 
-    let merchant_id=serde_json::from_str::<Uuid>(auth.axum_session.lock().unwrap().get_data(constant::MERCHANT_ID)).unwrap();
+    let merchant_id=Uuid::parse_str(auth.axum_session.lock().unwrap().get_data(constant::MERCHANT_ID)).unwrap();
 
     let _existed=service_types::table
         .filter(service_types::service_type_id.eq(service_type_id))
@@ -175,7 +175,7 @@ pub async fn update_service_type(
    
     let mut conn=pg.pool.get().unwrap();
 
-    let merchant_id=serde_json::from_str::<Uuid>(auth.axum_session.lock().unwrap().get_data(constant::MERCHANT_ID)).unwrap();
+    let merchant_id=Uuid::parse_str(auth.axum_session.lock().unwrap().get_data(constant::MERCHANT_ID)).unwrap();
 
     let _existed=service_types::table
         .filter(service_types::service_type_id.eq(service_type_id))
@@ -213,7 +213,7 @@ pub async fn get_service_type(
 
     let mut conn=pg.pool.get().unwrap();
     
-    let merchant_id=serde_json::from_str::<Uuid>(auth.axum_session.lock().unwrap().get_data(constant::MERCHANT_ID)).unwrap();
+    let merchant_id=Uuid::parse_str(auth.axum_session.lock().unwrap().get_data(constant::MERCHANT_ID)).unwrap();
 
     let service_type=service_types::table
         .filter(service_types::enabled.eq(true))

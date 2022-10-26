@@ -47,7 +47,7 @@ pub async fn get_members(
     
     let mut conn=pg.pool.get().unwrap();
     
-    let merchant_id=serde_json::from_str::<Uuid>(auth.axum_session.lock().unwrap().get_data(constant::MERCHANT_ID)).unwrap();
+    let merchant_id=Uuid::parse_str(auth.axum_session.lock().unwrap().get_data(constant::MERCHANT_ID)).unwrap();
 
     let fn_get_members_query=||{
         let mut query=members::table.inner_join(merchant_members::table.on(members::member_id.eq(merchant_members::member_id)))
@@ -101,7 +101,7 @@ pub async fn add_member(
     
     let mut conn=pg.pool.get().unwrap();
     
-    let merchant_id=serde_json::from_str::<Uuid>(auth.axum_session.lock().unwrap().get_data(constant::MERCHANT_ID)).unwrap();
+    let merchant_id=Uuid::parse_str(auth.axum_session.lock().unwrap().get_data(constant::MERCHANT_ID)).unwrap();
 
     let login_info=login_infos::table
         .filter(login_infos::enabled.eq(true))
@@ -157,7 +157,7 @@ pub async fn add_member(
         let user_id=Uuid::new_v4();
         let new_user=NewUser{
             user_id: &user_id,
-            description: "",
+            description: "后台添加",
             permissions:&serde_json::to_string(authorization_policy::DEFAULT_PERMISSIONS_OF_MEMBER).unwrap(),
             roles:"[]",
             enabled:true,
@@ -195,7 +195,7 @@ pub async fn add_member(
             create_time: Local::now(),
             update_time: Local::now(),
             data: None,
-            remark:None,
+            remark:req.remark.as_deref(),
         };
         member=diesel::insert_into(members::table)
             .values(&new_member)
@@ -238,7 +238,7 @@ pub async fn delete_member(
     
     let mut conn=pg.pool.get().unwrap();
 
-    let merchant_id=serde_json::from_str::<Uuid>(auth.axum_session.lock().unwrap().get_data(constant::MERCHANT_ID)).unwrap();
+    let merchant_id=Uuid::parse_str(auth.axum_session.lock().unwrap().get_data(constant::MERCHANT_ID)).unwrap();
 
     let _existed=members::table
         .filter(members::enabled.eq(true))
@@ -331,6 +331,7 @@ pub async fn update_member(
         members::real_name.eq(req.real_name),
         members::gender.eq(req.gender),
         members::birth_day.eq(req.birth_day),
+        members::remark.eq(req.remark),
         members::update_time.eq(Local::now())
     ))
     .execute(&mut *conn)
@@ -349,7 +350,7 @@ pub async fn get_member(
 
     let mut conn=pg.pool.get().unwrap();
     
-    let merchant_id=serde_json::from_str::<Uuid>(auth.axum_session.lock().unwrap().get_data(constant::MERCHANT_ID)).unwrap();
+    let merchant_id=Uuid::parse_str(auth.axum_session.lock().unwrap().get_data(constant::MERCHANT_ID)).unwrap();
 
     let member=members::table.inner_join(merchant_members::table.on(members::member_id.eq(merchant_members::member_id)))
         .filter(members::enabled.eq(true))
@@ -379,7 +380,7 @@ pub async fn recharge(
     
     let mut conn=pg.pool.get().unwrap();
     
-    let merchant_id=serde_json::from_str::<Uuid>(auth.axum_session.lock().unwrap().get_data(constant::MERCHANT_ID)).unwrap();
+    let merchant_id=Uuid::parse_str(auth.axum_session.lock().unwrap().get_data(constant::MERCHANT_ID)).unwrap();
 
     let _existed=members::table
         .filter(members::enabled.eq(true))
