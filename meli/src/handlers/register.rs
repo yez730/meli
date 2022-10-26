@@ -39,10 +39,10 @@ pub async fn register_merchant(State(pg):State<AxumPg>,mut auth: AuthSession<Axu
     let existed_merchant=select(exists(
             merchants::table
             .filter(merchants::enabled.eq(true))
-            .filter(merchants::merchant_name.eq(req.merchant_name.clone()))
+            .filter(merchants::merchant_name.eq(&req.merchant_name))
         ))
         .get_result(&mut *conn)
-        .map_err(|_|(StatusCode::INTERNAL_SERVER_ERROR,"get_result error".to_string()))?;
+        .unwrap();
     if existed_merchant{
         return Err((StatusCode::BAD_REQUEST,"该商户名已存在".to_string()));
     }
@@ -61,28 +61,21 @@ pub async fn register_merchant(State(pg):State<AxumPg>,mut auth: AuthSession<Axu
     };
     let merchant=diesel::insert_into(merchants::table)
         .values(&new_merchant)
-        .get_result::<Merchant>(&mut *conn).map_err(|e|{
-            tracing::error!("{}",e.to_string());
-            (StatusCode::INTERNAL_SERVER_ERROR,e.to_string())
-        })?;
+        .get_result::<Merchant>(&mut *conn)
+        .unwrap();
 
     let user:User;
 
-    let login_info=login_infos::table
+    let login_info_user=login_infos::table.inner_join(users::table.on(login_infos::user_id.eq(users::user_id)))
         .filter(login_infos::enabled.eq(true))
-        .filter(login_infos::login_info_account.eq(req.login_account.clone()))
-        .get_result::<LoginInfo>(&mut *conn)
+        .filter(users::enabled.eq(true))
+        .filter(login_infos::login_info_account.eq(&req.login_account))
+        .get_result::<(LoginInfo,User)>(&mut *conn)
         .ok();
 
-    if let Some(login_info)=login_info{
-        user=users::table
-            .filter(users::enabled.eq(true))
-            .filter(users::user_id.eq(login_info.user_id))
-            .get_result(&mut *conn).map_err(|e|{
-                tracing::error!("{}",e.to_string());
-                (StatusCode::INTERNAL_SERVER_ERROR,e.to_string())
-            })?;
-    }else {
+    if let Some((_,existed_user))=login_info_user{
+        user=existed_user;
+    } else {
         let user_description=format!("Administrator of merchant {}",req.merchant_name);
         let new_user=NewUser{
             user_id: &Uuid::new_v4(),
@@ -96,10 +89,8 @@ pub async fn register_merchant(State(pg):State<AxumPg>,mut auth: AuthSession<Axu
         };
         user=diesel::insert_into(users::table)
             .values(&new_user)
-            .get_result::<User>(&mut *conn).map_err(|e|{
-                tracing::error!("{}",e.to_string());
-                (StatusCode::INTERNAL_SERVER_ERROR,e.to_string())
-            })?;
+            .get_result::<User>(&mut *conn)
+            .unwrap();
 
         let login_info=NewLoginInfo{
             login_info_id: &Uuid::new_v4(),
@@ -112,13 +103,11 @@ pub async fn register_merchant(State(pg):State<AxumPg>,mut auth: AuthSession<Axu
         };
         diesel::insert_into(login_infos::table)
             .values(&login_info)
-            .execute(&mut *conn).map_err(|e|{
-                tracing::error!("{}",e.to_string());
-                (StatusCode::INTERNAL_SERVER_ERROR,e.to_string())
-            })?;
+            .execute(&mut *conn)
+            .unwrap();
     }
    
-     let new_barber=NewBarber{
+    let new_barber=NewBarber{
         user_id:  &user.user_id,
         barber_id: &Uuid::new_v4(),
         merchant_id:&new_merchant.merchant_id,
@@ -132,20 +121,18 @@ pub async fn register_merchant(State(pg):State<AxumPg>,mut auth: AuthSession<Axu
     };
     let barber=diesel::insert_into(barbers::table)
         .values(&new_barber)
-        .get_result::<Barber>(&mut *conn).map_err(|e|{
-            tracing::error!("{}",e.to_string());
-            (StatusCode::INTERNAL_SERVER_ERROR,e.to_string())
-        })?;
+        .get_result::<Barber>(&mut *conn)
+        .unwrap();
 
     // add permissions
+    let permissions=permissions::table
+        .filter(permissions::permission_id.eq_any(serde_json::from_str::<Vec<Uuid>>(&user.permissions).unwrap())) 
+        .filter(permissions::enabled.eq(true))
+        .get_results::<Permission>(&mut *conn)
+        .unwrap();
+    let mut permission_ids=permissions.iter().map(|p|p.permission_id).collect::<Vec<_>>();
     for &permission_code in authorization_policy::DEFAULT_PERMISSIONS_OF_MERCHANT_BARBER{
-        let permissions=permissions::table
-            .filter(permissions::permission_id.eq_any(serde_json::from_str::<Vec<Uuid>>(&user.permissions).unwrap())) 
-            .filter(permissions::enabled.eq(true))
-            .get_results::<Permission>(&mut *conn)
-            .unwrap();
-        let mut permission_ids=permissions.iter().map(|p|p.permission_id).collect::<Vec<_>>();
-        if !permissions.into_iter().any(|p|p.permission_code==permission_code){
+        if !permissions.iter().any(|p|p.permission_code==permission_code){
             let permission_id=permissions::table
                 .filter(permissions::permission_code.eq(permission_code)) 
                 .filter(permissions::enabled.eq(true))
@@ -154,22 +141,19 @@ pub async fn register_merchant(State(pg):State<AxumPg>,mut auth: AuthSession<Axu
                 .unwrap();
 
             permission_ids.push(permission_id);
-
-            diesel::update(
-                users::table
-                .filter(users::user_id.eq(user.user_id))
-                .filter(users::enabled.eq(true))
-            )
-            .set((
-                    users::permissions.eq(serde_json::to_string(&permission_ids).unwrap()),
-                    users::update_time.eq(Local::now())
-                ))
-            .execute(&mut *conn).map_err(|e|{
-                tracing::error!("{}",e.to_string());
-                (StatusCode::INTERNAL_SERVER_ERROR,e.to_string())
-            })?;
         }
     }
+    diesel::update(
+        users::table
+        .filter(users::user_id.eq(user.user_id))
+        .filter(users::enabled.eq(true))
+    )
+    .set((
+        users::permissions.eq(serde_json::to_string(&permission_ids).unwrap()),
+        users::update_time.eq(Local::now())
+    ))
+    .execute(&mut *conn)
+    .unwrap();
 
     let salt=env::var("DATABASE_ENCRYPTION_SAULT").unwrap();
     let config = argon2::Config::default();

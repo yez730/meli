@@ -118,7 +118,7 @@ pub async fn get_appointments(
             }),
             order:t.0,
         }).collect())
-        .map_err(|e|(StatusCode::INTERNAL_SERVER_ERROR,e.to_string()))?;
+        .unwrap();
     
     Ok(Json(data))
 }
@@ -155,11 +155,9 @@ pub async fn add_appointment(
         data: None,
     };
     diesel::insert_into(orders::table)
-    .values(&new_appointment)
-    .execute(&mut *conn).map_err(|e|{
-        tracing::error!("{}",e.to_string());
-        (StatusCode::INTERNAL_SERVER_ERROR,e.to_string())
-    })?;
+        .values(&new_appointment)
+        .execute(&mut *conn)
+        .unwrap();
 
     let event=orders::table
         .left_join(members::table.on(members::member_id.nullable().eq(orders::member_id)))
@@ -190,7 +188,8 @@ pub async fn add_appointment(
             }),
             order:t.0,
         })
-        .map_err(|e|(StatusCode::INTERNAL_SERVER_ERROR,e.to_string()))?;
+        .unwrap();
+
     Ok(Json(event))
 }
 
@@ -235,7 +234,7 @@ pub async fn get_appointment(
             }),
             order:t.0,
         })
-        .map_err(|e|(StatusCode::INTERNAL_SERVER_ERROR,e.to_string()))?;
+        .unwrap();
         
     Ok(Json(event))
 }

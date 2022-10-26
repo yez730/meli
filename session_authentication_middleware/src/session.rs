@@ -60,18 +60,16 @@ where
             session.set_user_id(user_id);
         }
 
-        self.refresh_identity().await;
+        self.refresh_identity(user_id).await;
     }
 
     // 新user_id 或 变更权限 时， 需要refresh_identity
-    pub async fn refresh_identity(&mut self){
+    pub async fn refresh_identity(&mut self,user_id:Uuid){
         let mut session=self.axum_session.lock().unwrap();
 
-        if let Some(user_id) =session.get_user_id(){
-            let identity=User::load_identity(user_id,self.database.clone());
+        let identity=User::load_identity(user_id,self.database.clone());
 
-            session.set_data(session_keys::IDENTITY.to_string(), serde_json::to_string(&identity).unwrap());
-        }
+        session.set_data(session_keys::IDENTITY.to_string(), serde_json::to_string(&identity).unwrap());
     }
 
     pub async fn sign_out(&mut self){

@@ -19,8 +19,14 @@ use super::{PaginatedListRequest,PaginatedListResponse, Search};
 #[derive(Deserialize)]
 pub struct ServiceTypeRequest{
     pub name:String,
+
+    #[serde(rename ="normalPrize")]
     pub normal_prize:BigDecimal,
+
+    #[serde(rename ="memberPrize")]
     pub member_prize:BigDecimal,
+
+    #[serde(rename ="estimatedDuration")]
     pub estimated_duration: i32,
 }
 
@@ -37,7 +43,7 @@ pub async fn get_service_types(
 
     let merchant_id=serde_json::from_str::<Uuid>(auth.axum_session.lock().unwrap().get_data(constant::MERCHANT_ID)).unwrap();
 
-    let get_service_types_query=||{
+    let fn_get_service_types_query=||{
         let mut query=service_types::table
             .filter(service_types::enabled.eq(true))
             .filter(service_types::merchant_id.eq(merchant_id))
@@ -52,13 +58,16 @@ pub async fn get_service_types(
         query
     };
 
-    let count=get_service_types_query().count().get_result(&mut *conn).map_err(|e|(StatusCode::INTERNAL_SERVER_ERROR,e.to_string()))?;
-    let data=get_service_types_query()
+    let count=fn_get_service_types_query()
+        .count()
+        .get_result(&mut *conn)
+        .unwrap();
+    let data=fn_get_service_types_query()
         .order(service_types::create_time.desc())
         .limit(params.page_size)
         .offset(params.page_index*params.page_size)
         .get_results::<ServiceType>(&mut *conn)
-        .map_err(|e|(StatusCode::INTERNAL_SERVER_ERROR,e.to_string()))?;
+        .unwrap();
     
     Ok(Json(PaginatedListResponse{
         page_index:params.page_index,
@@ -104,17 +113,15 @@ pub async fn add_service_type(
         };
         diesel::insert_into(service_types::table)
             .values(&new_service_type)
-            .execute(&mut *conn).map_err(|e|{
-                tracing::error!("{}",e.to_string());
-                (StatusCode::INTERNAL_SERVER_ERROR,e.to_string())
-            })?;
+            .execute(&mut *conn)
+            .unwrap();
 
         let service_type=service_types::table
             .filter(service_types::enabled.eq(true))
             .filter(service_types::service_type_id.eq(new_service_type.service_type_id))
             .filter(service_types::merchant_id.eq(merchant_id))
             .get_result::<ServiceType>(&mut *conn)
-            .map_err(|e|(StatusCode::INTERNAL_SERVER_ERROR,e.to_string()))?;
+            .unwrap();
         
         Ok(Json(service_type))
     }
@@ -132,7 +139,16 @@ pub async fn delete_service_type(
 
     let merchant_id=serde_json::from_str::<Uuid>(auth.axum_session.lock().unwrap().get_data(constant::MERCHANT_ID)).unwrap();
 
-    let count=diesel::update(
+    let _existed=service_types::table
+        .filter(service_types::service_type_id.eq(service_type_id))
+        .filter(service_types::merchant_id.eq(merchant_id))
+        .filter(service_types::enabled.eq(true))
+        .get_result::<ServiceType>(&mut *conn)
+        .map_err(|_|{
+            (StatusCode::NOT_FOUND,"服务类型不存在".to_string())
+        })?;
+
+    diesel::update(
         service_types::table
         .filter(service_types::service_type_id.eq(service_type_id))
         .filter(service_types::merchant_id.eq(merchant_id))
@@ -142,14 +158,8 @@ pub async fn delete_service_type(
         service_types::enabled.eq(false),
         service_types::update_time.eq(Local::now())
     ))
-    .execute(&mut *conn).map_err(|e|{
-        tracing::error!("{}",e.to_string());
-        (StatusCode::INTERNAL_SERVER_ERROR,e.to_string())
-    })?;
-
-    if count!=1 {
-        return Err((StatusCode::NOT_FOUND,"data not exists".to_string()));
-    }
+    .execute(&mut *conn)
+    .unwrap();
 
     Ok(())
 }
@@ -167,6 +177,13 @@ pub async fn update_service_type(
 
     let merchant_id=serde_json::from_str::<Uuid>(auth.axum_session.lock().unwrap().get_data(constant::MERCHANT_ID)).unwrap();
 
+    let _existed=service_types::table
+        .filter(service_types::service_type_id.eq(service_type_id))
+        .filter(service_types::merchant_id.eq(merchant_id))
+        .filter(service_types::enabled.eq(true))
+        .get_result::<ServiceType>(&mut *conn)
+        .unwrap();
+
     diesel::update(
         service_types::table
         .filter(service_types::service_type_id.eq(service_type_id))
@@ -174,16 +191,14 @@ pub async fn update_service_type(
         .filter(service_types::enabled.eq(true))
     )
     .set((
-            service_types::name.eq(req.name),
-            service_types::normal_prize.eq(req.normal_prize),
-            service_types::member_prize.eq(req.member_prize),
-            service_types::estimated_duration.eq(req.estimated_duration),
-            service_types::update_time.eq(Local::now())
-        ))
-    .execute(&mut *conn).map_err(|e|{
-        tracing::error!("{}",e.to_string());
-        (StatusCode::INTERNAL_SERVER_ERROR,e.to_string())
-    })?;
+        service_types::name.eq(req.name),
+        service_types::normal_prize.eq(req.normal_prize),
+        service_types::member_prize.eq(req.member_prize),
+        service_types::estimated_duration.eq(req.estimated_duration),
+        service_types::update_time.eq(Local::now())
+    ))
+    .execute(&mut *conn)
+    .unwrap();
     
     Ok(())
 }
@@ -205,7 +220,7 @@ pub async fn get_service_type(
         .filter(service_types::service_type_id.eq(service_type_id))
         .filter(service_types::merchant_id.eq(merchant_id))
         .get_result::<ServiceType>(&mut *conn)
-        .map_err(|e|(StatusCode::INTERNAL_SERVER_ERROR,e.to_string()))?;
+        .map_err(|_|(StatusCode::NOT_FOUND,"服务类型不存在".to_string()))?;
         
     Ok(Json(service_type))
 }

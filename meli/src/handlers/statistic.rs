@@ -71,7 +71,7 @@ pub async fn get_orders(
             barber:t.2,
             service_type:t.3,
         }).collect())
-        .map_err(|e|(StatusCode::INTERNAL_SERVER_ERROR,e.to_string()))?;
+        .unwrap();
     
     Ok(Json(PaginatedListResponse{
         page_index:params.page_index,
@@ -136,7 +136,7 @@ pub async fn get_recharge_records(
             barber:t.2,
             recharge_record:t.0,
         }).collect())
-        .map_err(|e|(StatusCode::INTERNAL_SERVER_ERROR,e.to_string()))?;
+        .unwrap();
     
     Ok(Json(PaginatedListResponse{
         page_index:params.page_index,

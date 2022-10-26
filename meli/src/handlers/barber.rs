@@ -3,11 +3,13 @@ use std::env;
 use axum::{http::StatusCode, Json, extract::State};
 use axum_session_authentication_middleware::session::AuthSession;
 use chrono::Local;
+use email_address::EmailAddress;
+use regex::Regex;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 use crate::{
     schema::*,
-    models::{Barber,Merchant, LoginInfo, NewLoginInfo}, authorization_policy
+    models::{Barber,Merchant, LoginInfo, NewLoginInfo}, authorization_policy, regex_constants::CELLPHONE_REGEX_STRING
 };
 use diesel::{
     prelude::*, // for .filter
@@ -44,7 +46,7 @@ pub async fn get_current_barber(
         .filter(merchants::enabled.eq(true))
         .get_result::<(Barber,Merchant)>(&mut *conn)
         .map(|bm|BarberResponse{ barber:bm.0,merchant:bm.1})
-        .map_err(|e|(StatusCode::INTERNAL_SERVER_ERROR,e.to_string()))?;
+        .unwrap();
         
     Ok(Json(barber))
 }
@@ -90,33 +92,41 @@ pub async fn update_info(
     if req.old_password.is_some() && req.new_password.is_none(){
         return Err((StatusCode::BAD_REQUEST,"新密码和旧密码不匹配".to_string()));
     }
-
+    
     let mut existed_email_login_info=None;
     if req.email.is_some(){
+        if EmailAddress::is_valid(req.email.as_ref().unwrap()){
+            return Err((StatusCode::BAD_REQUEST,"邮箱格式不正确".to_string()));
+        } 
+        
         existed_email_login_info=login_infos::table
             .filter(login_infos::enabled.eq(true))
             .filter(login_infos::login_info_type.eq("Email"))
-            .filter(login_infos::login_info_account.eq(req.email.clone().unwrap()))
+            .filter(login_infos::login_info_account.eq(req.email.as_ref().unwrap()))
             .get_result::<LoginInfo>(&mut *conn)
             .ok();
         if let Some(login_info)=existed_email_login_info.as_ref(){
             if login_info.user_id!=user_id{
-                return Err((StatusCode::BAD_REQUEST,"邮箱已被其他用户使用".to_string())); // TODO 提取单独方法，使用验证码总是可以修改
+                return Err((StatusCode::BAD_REQUEST,"邮箱已被其他用户使用，请联系管理员".to_string())); // TODO 提取单独方法，使用验证码总是可以修改
             }
         }
     }
 
     let mut existed_cellphone_login_info=None;
     if req.cellphone.is_some(){
+        if Regex::new(CELLPHONE_REGEX_STRING).unwrap().is_match(req.cellphone.as_ref().unwrap()){
+            return Err((StatusCode::BAD_REQUEST,"手机号码格式不正确".to_string()));
+        }
+
         existed_cellphone_login_info=login_infos::table
-        .filter(login_infos::enabled.eq(true))
-        .filter(login_infos::login_info_type.eq("Cellphone"))
-        .filter(login_infos::login_info_account.eq(req.cellphone.clone().unwrap()))
-        .get_result::<LoginInfo>(&mut *conn)
-        .ok();
+            .filter(login_infos::enabled.eq(true))
+            .filter(login_infos::login_info_type.eq("Cellphone"))
+            .filter(login_infos::login_info_account.eq(req.cellphone.as_ref().unwrap()))
+            .get_result::<LoginInfo>(&mut *conn)
+            .ok();
         if let Some(login_info)=existed_cellphone_login_info.as_ref(){
             if login_info.user_id!=user_id{
-                return Err((StatusCode::BAD_REQUEST,"手机号已被其他用户使用".to_string())); // TODO 提取单独方法，使用验证码总是可以修改
+                return Err((StatusCode::BAD_REQUEST,"手机号已被其他用户使用，请联系管理员".to_string())); // TODO 提取单独方法，使用验证码总是可以修改
             }
         }
     }
@@ -133,7 +143,8 @@ pub async fn update_info(
                 .filter(password_login_providers::password_hash.eq(old_hash))
             ))
             .get_result(&mut *conn)
-            .map_err(|_|(StatusCode::INTERNAL_SERVER_ERROR,"get_result error".to_string()))?;
+            .unwrap();
+
         if !is_old_password_match{
             return Err((StatusCode::BAD_REQUEST,"旧密码不正确".to_string()));
         }
@@ -145,20 +156,18 @@ pub async fn update_info(
             .filter(password_login_providers::enabled.eq(true))
         )
         .set((
-                password_login_providers::password_hash.eq(new_hash),
-                password_login_providers::update_time.eq(Local::now())
-            ))
-        .execute(&mut *conn).map_err(|e|{
-            tracing::error!("{}",e.to_string());
-            (StatusCode::INTERNAL_SERVER_ERROR,e.to_string())
-        })?;
+            password_login_providers::password_hash.eq(new_hash),
+            password_login_providers::update_time.eq(Local::now())
+        ))
+        .execute(&mut *conn)
+        .unwrap();
     }
 
     if req.email.is_some(){
         if existed_email_login_info.is_none(){
             let login_info=NewLoginInfo{
                 login_info_id: &Uuid::new_v4(),
-                login_info_account: &req.email.clone().unwrap(),
+                login_info_account: &req.email.as_ref().unwrap(),
                 login_info_type: "Email",
                 user_id: &user_id,
                 enabled: true, 
@@ -167,10 +176,8 @@ pub async fn update_info(
             };
             diesel::insert_into(login_infos::table)
             .values(&login_info)
-            .execute(&mut *conn).map_err(|e|{
-                tracing::error!("{}",e.to_string());
-                (StatusCode::INTERNAL_SERVER_ERROR,e.to_string())
-            })?;
+            .execute(&mut *conn)
+            .unwrap();
         }
     } 
     
@@ -178,7 +185,7 @@ pub async fn update_info(
         if existed_cellphone_login_info.is_none(){
             let login_info=NewLoginInfo{
                 login_info_id: &Uuid::new_v4(),
-                login_info_account: &req.cellphone.clone().unwrap(),
+                login_info_account: &req.cellphone.as_ref().unwrap(),
                 login_info_type: "Cellphone",
                 user_id: &user_id,
                 enabled: true, 
@@ -187,10 +194,8 @@ pub async fn update_info(
             };
             diesel::insert_into(login_infos::table)
             .values(&login_info)
-            .execute(&mut *conn).map_err(|e|{
-                tracing::error!("{}",e.to_string());
-                (StatusCode::INTERNAL_SERVER_ERROR,e.to_string())
-            })?;
+            .execute(&mut *conn)
+            .unwrap();
         }
     }
       
@@ -201,15 +206,13 @@ pub async fn update_info(
         .filter(barbers::enabled.eq(true))
     )
     .set((
-            barbers::cellphone.eq(req.cellphone.unwrap()), //TODO nullale
-            barbers::real_name.eq(req.real_name), 
-            barbers::email.eq(req.email),
-            barbers::update_time.eq(Local::now())
-        ))
-    .execute(&mut *conn).map_err(|e|{
-        tracing::error!("{}",e.to_string());
-        (StatusCode::INTERNAL_SERVER_ERROR,e.to_string())
-    })?;
+        barbers::cellphone.eq(req.cellphone.unwrap()), //TODO nullale
+        barbers::real_name.eq(req.real_name), 
+        barbers::email.eq(req.email),
+        barbers::update_time.eq(Local::now())
+    ))
+    .execute(&mut *conn)
+    .unwrap();
 
     diesel::update(
         merchants::table
@@ -217,15 +220,13 @@ pub async fn update_info(
         .filter(merchants::enabled.eq(true))
     )
     .set((
-            merchants::merchant_name.eq(req.merchant_name),
-            merchants::address.eq(req.merchant_address), 
-            merchants::remark.eq(req.merchant_remark),
-            merchants::update_time.eq(Local::now())
-        ))
-    .execute(&mut *conn).map_err(|e|{
-        tracing::error!("{}",e.to_string());
-        (StatusCode::INTERNAL_SERVER_ERROR,e.to_string())
-    })?;
+        merchants::merchant_name.eq(req.merchant_name),
+        merchants::address.eq(req.merchant_address), 
+        merchants::remark.eq(req.merchant_remark),
+        merchants::update_time.eq(Local::now())
+    ))
+    .execute(&mut *conn)
+    .unwrap();
     
     Ok(())
 }

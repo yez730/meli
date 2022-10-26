@@ -40,11 +40,11 @@ pub async fn barber_login_by_password(State(pg):State<AxumPg>,mut auth: AuthSess
         .get_result::<PasswordLoginProvider>(&mut *conn)
         .ok();
     if provider.is_none(){
-        return Err((StatusCode::UNAUTHORIZED,"用户禁止登录".into()));
+        return Err((StatusCode::BAD_REQUEST,"用户禁止登录".into()));
     }
 
     argon2::verify_encoded(&provider.unwrap().password_hash, req.password.as_bytes())
-            .map_err(|_|(StatusCode::INTERNAL_SERVER_ERROR,"密码验证失败".to_string()))?;
+        .map_err(|_|(StatusCode::BAD_REQUEST,"密码验证失败".to_string()))?;
 
     let barber_response=barbers::table
         .inner_join(merchants::table.on(barbers::merchant_id.eq(merchants::merchant_id)))
@@ -56,7 +56,7 @@ pub async fn barber_login_by_password(State(pg):State<AxumPg>,mut auth: AuthSess
         .map(|bm|BarberResponse{ barber:bm.0,merchant:bm.1})
         .ok();
     if barber_response.is_none(){
-        return Err((StatusCode::UNAUTHORIZED,"商户登录失败".into()));
+        return Err((StatusCode::BAD_REQUEST,"商户登录失败".into()));
     }
     auth.sign_in(login_info.as_ref().unwrap().user_id).await;
 
