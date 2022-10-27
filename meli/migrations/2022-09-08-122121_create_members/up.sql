@@ -5,7 +5,7 @@ CREATE TABLE members (
     user_id UUID NOT NULL,
     member_id UUID NOT NULL,
     cellphone VARCHAR NOT NULL,
-    real_name VARCHAR NULL,
+    real_name VARCHAR NOT NULL,
     gender VARCHAR NULL,
     birth_day DATE NULL,
     enabled BOOLEAN NOT NULL,

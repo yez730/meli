@@ -10,6 +10,7 @@ pub mod regex_constants;
 use std::env;
 
 use chrono::Local;
+use dotenvy::dotenv;
 use models::*;
 use uuid::Uuid;
 
@@ -39,21 +40,39 @@ pub fn create_or_update_super_user_barber(conn:&mut PgConnection){
     .unwrap();
     
     // 2.1 insert user
-    let mut perms=authorization_policy::DEFAULT_PERMISSIONS_OF_MERCHANT_BARBER.to_vec();
-    perms.push(authorization_policy::MERCHANT_ADMINISTRATOR); //商户管理员权限
-    perms.push(authorization_policy::BARBER_BASE); //商户用户权限
-    
-    let perm_ids=permissions::table
-    .filter(permissions::permission_code.eq_any(perms)) 
-    .filter(permissions::enabled.eq(true))
-    .select(permissions::permission_id)
-    .get_results::<Uuid>(conn).unwrap();
+    // add permissions
+    let mut ids=Vec::new();
+    for &permission_code in authorization_policy::ADMINISTRATOR_PERMISSIONS_OF_MERCHANT_BARBER{
+        let permission_id=permissions::table
+            .filter(permissions::permission_code.eq(permission_code)) 
+            .filter(permissions::enabled.eq(true))
+            .select(permissions::permission_id)
+            .get_result::<Uuid>(&mut *conn)
+            .unwrap();
+
+        ids.push(format!("{}:{}",new_merchant.merchant_id,permission_id));
+    }
+    let administrator_permission_id=permissions::table
+        .filter(permissions::permission_code.eq(authorization_policy::MERCHANT_ADMINISTRATOR))  //商户管理员权限 
+        .filter(permissions::enabled.eq(true))
+        .select(permissions::permission_id)
+        .get_result::<Uuid>(&mut *conn)
+        .unwrap();
+    ids.push(format!("{}:{}",new_merchant.merchant_id,administrator_permission_id));
+
+    let barber_base_permission_id=permissions::table
+        .filter(permissions::permission_code.eq(authorization_policy::BARBER_BASE))  //商户用户权限 
+        .filter(permissions::enabled.eq(true))
+        .select(permissions::permission_id)
+        .get_result::<Uuid>(&mut *conn)
+        .unwrap();
+    ids.push(format!("{}:{}",new_merchant.merchant_id,barber_base_permission_id));
 
     let user_id=Uuid::new_v4();
     let new_user=NewUser{
         user_id: &user_id,
         description: "test user",
-        permissions:&serde_json::to_string(&perm_ids).unwrap(),
+        permissions:&serde_json::to_string(&ids).unwrap(),
         roles:"[]",
         enabled:true,
         create_time: Local::now(),
@@ -70,9 +89,9 @@ pub fn create_or_update_super_user_barber(conn:&mut PgConnection){
         user_id: &user_id,
         barber_id: &Uuid::new_v4(),
         merchant_id: &merchant_id,
-        cellphone:"13764197590",
-        email:None,
-        real_name:Some("方小会"),
+        cellphone:Some("13764197590"),
+        email:Some("463432609@qq.com"),
+        real_name:"方小会",
         enabled:true,
         create_time: Local::now(),
         update_time: Local::now(),
@@ -109,6 +128,7 @@ pub fn create_or_update_super_user_barber(conn:&mut PgConnection){
 
     // 3.2 add password login info provider
     let password = b"123456";
+    dotenv().expect("Cannot find .env file.");
     let salt = env::var("DATABASE_ENCRYPTION_SAULT").unwrap();
     let config = argon2::Config::default();
     let hash = argon2::hash_encoded(password, salt.as_bytes(), &config).unwrap();
@@ -246,7 +266,9 @@ mod test{
     #[test]
     #[ignore]
     fn test3(){
-        assert!(regex::Regex::new(regex_constants::CELLPHONE_REGEX_STRING).unwrap().is_match("14764197590"));
+        let h:std::collections::HashMap<String,String>=std::collections::HashMap::new();
+        let s=serde_json::to_string(&h).unwrap();
+        assert_eq!(s,"s");
         // let input1=Input3{a:"123".into(),b:Some(NaiveDate::from_ymd(2022, 4, 18))};
         // let json1=serde_json::to_string(&input1).unwrap(); //2022-04-18
         // assert_eq!(json1,"");

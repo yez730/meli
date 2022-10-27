@@ -51,6 +51,8 @@ async fn main(){
         .route("/merchant/barbers", get(get_barbers).post(add_barber))
         .route("/merchant/barber/:barber_id", get(get_barber).post(update_barber).delete(delete_barber))
 
+        .route("/merchant/get_all_permissions", get(get_all_permissions))
+
         .route("/members", get(get_members).post(add_member))
         .route("/member/:member_id", get(get_member).post(update_member).delete(delete_member))
         .route("/member/recharge/:member_id", post(recharge))

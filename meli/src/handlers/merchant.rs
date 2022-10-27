@@ -1,5 +1,8 @@
+use std::collections::HashMap;
+
 use axum::{http::StatusCode, Json, extract::{Query, Path, State}};
-use axum_session_authentication_middleware::session::AuthSession;
+use axum_session_authentication_middleware::{session::AuthSession , user as auth_user};
+use axum_session_middleware::constants::session_keys;
 use chrono::Local;
 use email_address::EmailAddress;
 use regex::Regex;
@@ -7,7 +10,7 @@ use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 use crate::{
     schema::*,
-    models::{Barber, NewUser, NewBarber, NewLoginInfo, Merchant, LoginInfo, Permission}, authorization_policy,constant, regex_constants::CELLPHONE_REGEX_STRING
+    models::{Barber, NewUser, NewBarber, NewLoginInfo, Merchant, LoginInfo, Permission, Role}, authorization_policy,constant, regex_constants::CELLPHONE_REGEX_STRING
 };
 use diesel::{
     prelude::*, // for .filter
@@ -45,24 +48,15 @@ pub struct GetMerchantsByLoginAccount{
 pub async fn get_merchants_by_login_account(State(pg):State<AxumPg>,  Query(query):Query<GetMerchantsByLoginAccount>,)->Result<Json<Vec<Merchant>>,(StatusCode,String)>{
     let mut conn=pg.pool.get().unwrap();
 
-    let login_info=login_infos::table
+    let merchants=barbers::table
+        .inner_join(login_infos::table.on(login_infos::user_id.eq(barbers::user_id)))
+        .inner_join(merchants::table.on(barbers::merchant_id.eq(merchants::merchant_id)))
         .filter(login_infos::login_info_account.eq(&query.login_account))
         .filter(login_infos::enabled.eq(true))
-        .get_result::<LoginInfo>(&mut *conn)
-        .ok();
-
-    if login_info.is_none() {
-        tracing::warn!("通过登录名获取商户列表失败，登录名：{}。",query.login_account);
-        return Err((StatusCode::NOT_FOUND,"用户未注册".to_string()));
-    }
-
-    let merchants=barbers::table
-        .inner_join(merchants::table.on(barbers::merchant_id.eq(merchants::merchant_id)))
         .filter(barbers::enabled.eq(true))
-        .filter(barbers::user_id.eq(login_info.unwrap().user_id))
         .filter(merchants::enabled.eq(true))
-        .get_results::<(Barber,Merchant)>(&mut *conn)
-        .map(|bm|bm.into_iter().map(|t|t.1).collect())
+        .get_results::<(Barber,LoginInfo,Merchant)>(&mut *conn)
+        .map(|bm|bm.into_iter().map(|t|t.2).collect())
         .unwrap();
 
     return Ok(Json(merchants));
@@ -87,9 +81,7 @@ pub async fn get_barbers(
         .into_boxed();
 
     if let Some(key)=search.key.as_ref(){
-        if key.len()>0 {
-            query=query.filter(barbers::cellphone.ilike(format!("%{key}%")).or(barbers::real_name.ilike(format!("%{key}%"))));   
-        }
+        query=query.filter(barbers::cellphone.ilike(format!("%{key}%")).or(barbers::real_name.ilike(format!("%{key}%"))));  
     }
 
     let data=query
@@ -183,7 +175,7 @@ pub async fn add_barber(
                 let new_user=NewUser{
                     user_id: &Uuid::new_v4(),
                     description: "商户管理员添加",
-                    permissions:&serde_json::to_string(authorization_policy::DEFAULT_PERMISSIONS_OF_MERCHANT_BARBER).unwrap(),
+                    permissions:"[]",
                     roles:"[]",
                     enabled:true,
                     create_time: Local::now(),
@@ -220,7 +212,7 @@ pub async fn add_barber(
                 let new_user=NewUser{
                     user_id: &Uuid::new_v4(),
                     description: "商户管理员添加",
-                    permissions:&serde_json::to_string(authorization_policy::DEFAULT_PERMISSIONS_OF_MERCHANT_BARBER).unwrap(),
+                    permissions:"[]",
                     roles:"[]",
                     enabled:true,
                     create_time: Local::now(),
@@ -256,8 +248,8 @@ pub async fn add_barber(
         barber_id: &Uuid::new_v4(),
         merchant_id:&merchant_id,
         email:req.email.as_deref(),
-        cellphone:&req.cellphone.unwrap(), //TODO nullable
-        real_name:req.real_name.as_deref(),
+        cellphone:req.cellphone.as_deref(), //TODO nullable
+        real_name:req.real_name.as_ref(),
         enabled:true,
         create_time: Local::now(),
         update_time: Local::now(),
@@ -269,31 +261,25 @@ pub async fn add_barber(
         .unwrap();
 
     // add permissions
-    let permissions=permissions::table
-        .filter(permissions::permission_id.eq_any(serde_json::from_str::<Vec<Uuid>>(user.as_ref().unwrap().permissions.as_str()).unwrap())) 
-        .filter(permissions::enabled.eq(true))
-        .get_results::<Permission>(&mut *conn)
-        .unwrap();
-    let mut permission_ids=permissions.iter().map(|p|p.permission_id).collect::<Vec<_>>();
-    for &permission_code in authorization_policy::DEFAULT_PERMISSIONS_OF_MERCHANT_BARBER{
-        if !permissions.iter().any(|p|p.permission_code==permission_code){
-            let permission_id=permissions::table
-            .filter(permissions::permission_code.eq(permission_code)) 
-            .filter(permissions::enabled.eq(true))
-            .select(permissions::permission_id)
-            .get_result::<Uuid>(&mut *conn)
-            .unwrap();
-
-            permission_ids.push(permission_id);
-        }
+    let mut ids=serde_json::from_str::<Vec<String>>(&user.as_ref().unwrap().permissions).unwrap();
+    for permission_id in req.permission_ids{
+        ids.push(format!("{}:{}",merchant_id,permission_id));
     }
+    let barber_base_permission_id=permissions::table
+        .filter(permissions::permission_code.eq(authorization_policy::BARBER_BASE)) 
+        .filter(permissions::enabled.eq(true))
+        .select(permissions::permission_id)
+        .get_result::<Uuid>(&mut *conn)
+        .unwrap();
+    ids.push(format!("{}:{}",merchant_id,barber_base_permission_id));
+    
     diesel::update(
         users::table
         .filter(users::user_id.eq(user.as_ref().unwrap().user_id))
         .filter(users::enabled.eq(true))
     )
     .set((
-        users::permissions.eq(serde_json::to_string(&permission_ids).unwrap()),
+        users::permissions.eq(serde_json::to_string(&ids).unwrap()),
         users::update_time.eq(Local::now())
     ))
     .execute(&mut *conn)
@@ -373,18 +359,18 @@ pub struct BarberEditRequest{
     pub cellphone:Option<String>,
 
     #[serde(rename ="realName")]
-    pub real_name:Option<String>,
+    pub real_name:String,
 
     pub email:Option<String>,
 
-    #[serde(rename ="permissionCodes")]
-    pub permission_codes:Vec<String>,
+    #[serde(rename ="permissionIds")]
+    pub permission_ids:Vec<Uuid>,
 }
 
 pub async fn update_barber(
     State(pg):State<AxumPg>,
     Path(barber_id):Path<Uuid>, 
-    mut auth: AuthSession<AxumPg, AxumPg,User>,
+    auth: AuthSession<AxumPg, AxumPg,User>,
     Json(req): Json<BarberEditRequest>
 )->Result<(),(StatusCode,String)>{
     //检查登录&权限
@@ -398,12 +384,11 @@ pub async fn update_barber(
         return Err((StatusCode::BAD_REQUEST,"手机号码和邮箱不能同时为空".to_string()));
     }
 
-    let (barber,user)=barbers::table.inner_join(users::table.on(barbers::user_id.eq(users::user_id)))
-        .filter(users::enabled.eq(true))
+    let barber=barbers::table
         .filter(barbers::barber_id.eq(barber_id))
         .filter(barbers::merchant_id.eq(merchant_id))
         .filter(barbers::enabled.eq(true))
-        .get_result::<(Barber,User)>(&mut *conn)
+        .get_result::<Barber>(&mut *conn)
         .map_err(|_|{
             (StatusCode::NOT_FOUND,"理发师不存在".to_string())
         })?;
@@ -497,43 +482,150 @@ pub async fn update_barber(
     .unwrap();
 
     // update permissions
-    // 1. 删掉旧的
-    diesel::update(
-        users::table
-        .filter(users::user_id.eq(user.user_id))
+    let administrator_permission_id=permissions::table
+        .filter(permissions::permission_code.eq(authorization_policy::MERCHANT_ADMINISTRATOR)) 
+        .filter(permissions::enabled.eq(true))
+        .select(permissions::permission_id)
+        .get_result::<Uuid>(&mut *conn)
+        .unwrap();
+
+    let permissions=users::table
         .filter(users::enabled.eq(true))
-    )
-    .set((
-        users::permissions.eq("[]"),
-    )).execute(&mut *conn).unwrap();
-    // 2. 添加新权限
-    let mut permission_ids=Vec::new();
-    for permission_code in req.permission_codes{
-        let permission_id=permissions::table
-            .filter(permissions::permission_code.eq(permission_code)) 
+        .filter(users::user_id.eq(barber.user_id))
+        .select(users::permissions)
+        .get_result::<String>(&mut *conn)
+        .unwrap();
+
+    let mut ids=serde_json::from_str::<Vec<String>>(permissions.as_str()).unwrap();
+    let is_administrator=ids.contains(&format!("{}:{}",merchant_id,administrator_permission_id));
+    if !is_administrator{
+        tracing::debug!("is_administrator");
+        ids.retain(|id_str|{
+            let mut id_iter=id_str.split(':'); // `merchant_id:permission_id` or `permission_id`
+    
+            let id=Uuid::parse_str(id_iter.next().unwrap()).unwrap();
+            merchant_id!=id
+        });
+        
+        for permission_id in req.permission_ids{
+            ids.push(format!("{}:{}",merchant_id,permission_id));
+        }
+        let barber_base_permission_id=permissions::table
+            .filter(permissions::permission_code.eq(authorization_policy::BARBER_BASE)) 
             .filter(permissions::enabled.eq(true))
             .select(permissions::permission_id)
             .get_result::<Uuid>(&mut *conn)
-            .ok();
-        if permission_id.is_some(){
-            permission_ids.push(permission_id);
-        }
+            .unwrap();
+        ids.push(format!("{}:{}",merchant_id,barber_base_permission_id));
+        
+        diesel::update(
+            users::table
+            .filter(users::user_id.eq(barber.user_id))
+            .filter(users::enabled.eq(true))
+        )
+        .set((
+                users::permissions.eq(serde_json::to_string(&ids).unwrap()),
+                users::update_time.eq(Local::now())
+            ))
+        .execute(&mut *conn)
+        .unwrap();
     }
-    diesel::update(
-        users::table
-        .filter(users::user_id.eq(user.user_id))
-        .filter(users::enabled.eq(true))
-    )
-    .set((
-            users::permissions.eq(serde_json::to_string(&permission_ids).unwrap()),
-            users::update_time.eq(Local::now())
-        ))
-    .execute(&mut *conn)
-    .unwrap();
-    // 3. 刷新identity
-    auth.refresh_identity(user.user_id).await;
+
+    // 3. 刷新 session data (如果登录了的话)
+    refresh_identity_data(barber.user_id, merchant_id, pg).await;
     
     Ok(())
+}
+
+async fn refresh_identity_data(user_id:Uuid,merchant_id:Uuid, pg:AxumPg){
+    let mut conn=pg.pool.get().unwrap();
+
+    let data_str=sessions::table
+        .filter(sessions::user_id.eq(user_id))
+        .filter(sessions::expiry_time.gt(Local::now()))
+        .select(sessions::data)
+        .get_result::<String>(&mut *conn)
+        .ok();
+
+    if let Some(data)=data_str{
+        let user=users::table
+        .filter(users::user_id.eq(user_id))
+        .filter(users::enabled.eq(true))
+        .get_result::<User>(&mut *conn)
+        .unwrap();
+
+        let mut current_permission_ids=Vec::new();
+        let ids=serde_json::from_str::<Vec<String>>(&user.permissions).unwrap();
+        for id_str in ids {
+            let mut id_iter=id_str.split(':');
+
+            let id1=Uuid::parse_str(id_iter.next().unwrap()).unwrap();
+            let id2=id_iter.next();
+            
+            match id2 {
+                Some(permission_id) if id1==merchant_id=>{
+                    current_permission_ids.push(Uuid::parse_str(permission_id).unwrap());
+                }
+                None=>{
+                    current_permission_ids.push(id1);
+                }
+                _=>{}
+            }
+        }
+
+        let permissions=permissions::table
+            .filter(permissions::permission_id.eq_any(current_permission_ids))
+            .filter(permissions::enabled.eq(true))
+            .get_results::<Permission>(&mut *conn)
+            .unwrap();
+        let roles=roles::table
+            .filter(roles::role_id.eq_any(serde_json::from_str::<Vec<Uuid>>(&user.roles).unwrap())) 
+            .filter(roles::enabled.eq(true))
+            .get_results::<Role>(&mut *conn)
+            .unwrap();
+
+        let identity=auth_user::Identity{
+            user_id:user.user_id,
+            roles:roles.into_iter().map(|r|auth_user::Role{
+                role_id: r.role_id,
+                role_code: r.role_code,
+                role_name:r.role_name,
+
+                permissions:r.permissions,
+                description:r.description,
+                enabled:r.enabled,
+                create_time: r.create_time,
+                update_time: r.update_time,
+                data: r.data,
+            }).collect(),
+            permission_codes:permissions.iter().map(|p|p.permission_code.clone()).collect(),
+            permissions:permissions.into_iter().map(|p|auth_user::Permission{
+                permission_id: p.permission_id,
+                    permission_code: p.permission_code,
+                    permission_name :p.permission_name,
+                    description: p.description,
+                    enabled:p.enabled,
+                    create_time: p.create_time,
+                    update_time: p.update_time,
+                    data: p.data,
+            }).collect(),
+        };
+
+        let mut session_data:HashMap<String,String>=serde_json::from_str::<HashMap<String,String>>(&data).unwrap();
+        session_data.insert(session_keys::IDENTITY.to_string(), serde_json::to_string(&identity).unwrap());
+
+        diesel::update(
+            sessions::table
+            .filter(sessions::user_id.eq(user_id))
+            .filter(sessions::expiry_time.gt(Local::now()))
+        )
+        .set((
+                sessions::data.eq(serde_json::to_string(&session_data).unwrap()),                    
+                sessions::update_time.eq(Local::now()),
+            ))
+        .execute(&mut *conn)
+        .unwrap();
+    }
 }
 
 #[derive(Serialize)]
@@ -567,17 +659,67 @@ pub async fn get_barber(
             (StatusCode::NOT_FOUND,"理发师不存在".to_string())
         })?;
 
-    let permission_codes=permissions::table
-        .filter(permissions::permission_id.eq_any(serde_json::from_str::<Vec<Uuid>>(&user.permissions).unwrap())) 
-        .filter(permissions::enabled.eq(true))
-        .select(permissions::permission_code)
-        .get_results::<String>(&mut *conn)
-        .unwrap();
+    let mut permission_codes=Vec::new();
+
+    let ids=serde_json::from_str::<Vec<String>>(&user.permissions).unwrap();
+    for id_str in ids {
+        let mut id_iter=id_str.split(':'); // `merchant_id:permission_id` or `permission_id`
+
+        let id=Uuid::parse_str(id_iter.next().unwrap()).unwrap();
+        if id==merchant_id {
+            let permission_id=Uuid::parse_str(id_iter.next().unwrap()).unwrap();
+
+            let permission_code=permissions::table
+                .filter(permissions::permission_id.eq(permission_id)) 
+                .filter(permissions::enabled.eq(true))
+                .select(permissions::permission_code)
+                .get_result::<String>(&mut *conn)
+                .unwrap();
+            permission_codes.push(permission_code);
+        }
+    }
 
     let res= BarberEditResponse{
         barber,
         permission_codes
     };
         
+    Ok(Json(res))
+}
+
+#[derive(Serialize)]
+pub struct PermissionResponse{
+    #[serde(rename ="allPermissions")]
+    pub all_permissions:Vec<Permission>,
+
+    #[serde(rename ="defaultPermissions")]
+    pub default_permissions:Vec<Permission>,
+}
+
+pub async fn get_all_permissions(
+    State(pg):State<AxumPg>,
+    auth: AuthSession<AxumPg, AxumPg,User>,
+)->Result<Json<PermissionResponse>,(StatusCode,String)>{
+    //检查登录&权限
+    auth.require_permissions(vec![authorization_policy::MERCHANT_ADMINISTRATOR]).map_err(|e|(StatusCode::UNAUTHORIZED,e.to_string()))?;
+    
+    let mut conn=pg.pool.get().unwrap();
+
+    let all_permissions=permissions::table
+        .filter(permissions::permission_code.eq_any(authorization_policy::ADMINISTRATOR_PERMISSIONS_OF_MERCHANT_BARBER)) 
+        .filter(permissions::enabled.eq(true))
+        .get_results::<Permission>(&mut *conn)
+        .unwrap();
+
+    let default_permissions=permissions::table
+        .filter(permissions::permission_code.eq_any(authorization_policy::DEFAULT_PERMISSIONS_OF_MERCHANT_BARBER)) 
+        .filter(permissions::enabled.eq(true))
+        .get_results::<Permission>(&mut *conn)
+        .unwrap();
+
+    let res=PermissionResponse{
+        all_permissions,
+        default_permissions
+    };
     Ok(Json(res))
 }

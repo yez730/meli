@@ -26,9 +26,9 @@ where
     #[inline]
     pub fn new(database: T,config:AxumSessionConfig) -> Self {
         Self {
-            database:database,
+            database,
             memory_store: Default::default(),
-            config: config,
+            config,
         }
     }
     pub fn with_config(&mut self,config: AxumSessionConfig){
@@ -44,7 +44,7 @@ where
         if let Some(user_id)=sess.user_id {
             let session_data=SessionData{
                 session_id:sess.session_id,
-                user_id:user_id,
+                user_id,
                 init_time:sess.init_time,
                 expiry_time:sess.expiry_time,
                 data:sess.data,

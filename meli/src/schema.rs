@@ -6,9 +6,9 @@ diesel::table! {
         user_id -> Uuid,
         barber_id -> Uuid,
         merchant_id -> Uuid,
-        cellphone -> Varchar,
+        cellphone -> Nullable<Varchar>,
         email -> Nullable<Varchar>,
-        real_name -> Nullable<Varchar>,
+        real_name -> Varchar,
         enabled -> Bool,
         create_time -> Timestamptz,
         update_time -> Timestamptz,
@@ -35,7 +35,7 @@ diesel::table! {
         user_id -> Uuid,
         member_id -> Uuid,
         cellphone -> Varchar,
-        real_name -> Nullable<Varchar>,
+        real_name -> Varchar,
         gender -> Nullable<Varchar>,
         birth_day -> Nullable<Date>,
         enabled -> Bool,
@@ -178,7 +178,7 @@ diesel::table! {
         expiry_time -> Timestamptz,
         create_time -> Timestamptz,
         update_time -> Timestamptz,
-        data -> Nullable<Text>,
+        data -> Text,
     }
 }
 

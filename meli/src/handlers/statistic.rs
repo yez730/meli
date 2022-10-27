@@ -62,17 +62,12 @@ pub async fn get_orders(
             .left_join(members::table.on(members::member_id.nullable().eq(orders::member_id)))
             .left_join(barbers::table.on(orders::barber_id.eq(barbers::barber_id)))
             .left_join(service_types::table.on(orders::service_type_id.eq(service_types::service_type_id)))
-            .filter(members::enabled.is_null().or(members::enabled.is_not_null().and(members::enabled.nullable().eq(true))))
-            .filter(barbers::enabled.is_null().or(barbers::enabled.is_not_null().and(barbers::enabled.nullable().eq(true))))
-            .filter(service_types::enabled.is_null().or(service_types::enabled.is_not_null().and(service_types::enabled.nullable().eq(true))))
             .filter(orders::enabled.eq(true))
             .filter(orders::merchant_id.eq(merchant_id))
             .into_boxed();
         
         if let Some(key)=search.key.as_ref() {
-            if key.len()>0 {
-                query=query.filter(members::real_name.ilike(format!("%{key}%")));   
-            }
+            query=query.filter(members::real_name.ilike(format!("%{key}%")));   
         }
 
         query
@@ -89,26 +84,22 @@ pub async fn get_orders(
         .get_results::<(Order,Option<Member>,Option<Barber>,Option<ServiceType>)>(&mut *conn)
         .map(|v|v.into_iter().map(|t|OrderResponse{
             order_id:t.0.order_id,
-            service_name:t.3.map(|s|s.name).unwrap_or("-".into()),
-            consumer_type: if t.0.consumer_type =="member" {
-                    "会员".into()
-                } else {
-                    "进店顾客".into()
-                },
-            member_name:if t.0.consumer_type =="member" {
-                    t.1.as_ref().and_then(|m|m.real_name.clone()).unwrap_or("-".into())
+            service_name:if t.3.as_ref().unwrap().enabled { t.3.as_ref().unwrap().name.clone() } else { "-".into()}, //TODO 冗余  已删除
+            consumer_type: if t.0.consumer_type =="member" { "会员".into() } else {"进店顾客".into()},
+            member_name: if t.0.consumer_type =="member" {
+                    if t.1.as_ref().unwrap().enabled {t.1.as_ref().unwrap().real_name.clone() } else {"-".into() }
                 } else {
                     "".into()
                 },
             member_cellphone:if t.0.consumer_type =="member" {
-                    t.1.as_ref().map(|m|m.cellphone.clone()).unwrap_or("-".into())
+                if t.1.as_ref().unwrap().enabled {t.1.as_ref().unwrap().cellphone.clone() } else {"-".into() }
                 } else {
                     "".into()
                 },
             amount:t.0.amount,
             total_minutes:(t.0.end_time-t.0.start_time).num_minutes(),
             payment_type: if t.0.payment_type=="member" {"会员充值".into()} else {"现金".into()},
-            barber_name:t.2.and_then(|b|b.real_name).unwrap_or("-".into()),
+            barber_name: if t.2.as_ref().unwrap().enabled {t.2.as_ref().unwrap().real_name.clone() } else {"-".into() },
             create_time:t.0.create_time,
         }).collect())
         .unwrap();
@@ -158,16 +149,12 @@ pub async fn get_recharge_records(
         let mut query=recharge_records::table
         .left_join(members::table.on(recharge_records::member_id.eq(members::member_id)))
         .left_join(barbers::table.on(recharge_records::barber_id.eq(barbers::barber_id)))
-        .filter(members::enabled.is_null().or(members::enabled.is_not_null().and(members::enabled.nullable().eq(true))))
-        .filter(barbers::enabled.is_null().or(barbers::enabled.is_not_null().and(barbers::enabled.nullable().eq(true))))
         .filter(recharge_records::enabled.eq(true))
         .filter(recharge_records::merchant_id.eq(merchant_id))
         .into_boxed();
         
         if let Some(key)=search.key.as_ref() {
-            if key.len()>0 {
-                query=query.filter(members::real_name.ilike(format!("%{key}%")));   
-            }
+            query=query.filter(members::real_name.ilike(format!("%{key}%"))); 
         }
 
         query
@@ -184,10 +171,10 @@ pub async fn get_recharge_records(
         .get_results::<(RechargeRecord,Option<Member>,Option<Barber>)>(&mut *conn)
         .map(|v|v.into_iter().map(|t|RechargeRecordResponse{
             recharge_record_id:t.0.recharge_record_id,
-            member_name:t.1.as_ref().and_then(|m|m.real_name.clone()).unwrap_or("-".into()),
-            member_cellphone:t.1.as_ref().map(|m|m.cellphone.clone()).unwrap_or("-".into()),
+            member_name: if t.1.as_ref().unwrap().enabled {t.1.as_ref().unwrap().real_name.clone()} else { "-".into()},
+            member_cellphone:if t.1.as_ref().unwrap().enabled {t.1.as_ref().unwrap().cellphone.clone()} else { "-".into()},
             amount:t.0.amount,
-            barber_name:t.2.and_then(|b|b.real_name).unwrap_or("-".into()),
+            barber_name:if t.2.as_ref().unwrap().enabled {t.2.as_ref().unwrap().real_name.clone()} else { "-".into()},
             crate_time:t.0.create_time,
         }).collect())
         .unwrap();

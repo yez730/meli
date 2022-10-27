@@ -3,12 +3,13 @@ use std::env;
 use axum::{extract::State,http::StatusCode, Json};
 use axum_session_authentication_middleware::session::AuthSession;
 use chrono::Local;
+use dotenvy::dotenv;
 use email_address::EmailAddress;
 use regex::Regex;
 use serde::Deserialize;
 use uuid::Uuid;
 
-use crate::{axum_pg::AxumPg, models::{User, NewMerchant, NewUser, NewLoginInfo, NewPasswordLoginProvider, NewBarber, Barber, Merchant, Permission, LoginInfo}, schema::{login_infos, merchants, users, password_login_providers, barbers}, authorization_policy, constant, regex_constants::CELLPHONE_REGEX_STRING};
+use crate::{axum_pg::AxumPg, models::{User, NewMerchant, NewUser, NewLoginInfo, NewPasswordLoginProvider, NewBarber, Barber, Merchant, LoginInfo}, schema::{login_infos, merchants, users, password_login_providers, barbers}, authorization_policy, constant, regex_constants::CELLPHONE_REGEX_STRING};
 use diesel::{
     prelude::*,
     select, 
@@ -24,6 +25,9 @@ pub struct RegisterMerchantRequest{
 
     #[serde(rename="loginAccount")]
     pub login_account:String,
+
+    #[serde(rename="accountRealName")]
+    pub account_real_name:String,
 
     pub password:String,
 }
@@ -84,7 +88,7 @@ pub async fn register_merchant(State(pg):State<AxumPg>,mut auth: AuthSession<Axu
         let new_user=NewUser{
             user_id: &Uuid::new_v4(),
             description: user_description.as_str(),
-            permissions:&serde_json::to_string(authorization_policy::DEFAULT_PERMISSIONS_OF_MERCHANT_BARBER).unwrap(),
+            permissions:"[]",
             roles:"[]",
             enabled:true,
             create_time: Local::now(),
@@ -115,9 +119,9 @@ pub async fn register_merchant(State(pg):State<AxumPg>,mut auth: AuthSession<Axu
         user_id:  &user.user_id,
         barber_id: &Uuid::new_v4(),
         merchant_id:&new_merchant.merchant_id,
-        email:None,
-        cellphone:&req.login_account, //TODO nullable
-        real_name:None,
+        email:if login_info_type=="Email" {Some(req.login_account.as_ref())} else {None},
+        cellphone:if login_info_type=="Cellphone" {Some(req.login_account.as_ref())} else {None},
+        real_name:req.account_real_name.as_ref(),
         enabled:true,
         create_time: Local::now(),
         update_time: Local::now(),
@@ -129,36 +133,46 @@ pub async fn register_merchant(State(pg):State<AxumPg>,mut auth: AuthSession<Axu
         .unwrap();
 
     // add permissions
-    let permissions=permissions::table
-        .filter(permissions::permission_id.eq_any(serde_json::from_str::<Vec<Uuid>>(&user.permissions).unwrap())) 
-        .filter(permissions::enabled.eq(true))
-        .get_results::<Permission>(&mut *conn)
-        .unwrap();
-    let mut permission_ids=permissions.iter().map(|p|p.permission_id).collect::<Vec<_>>();
-    for &permission_code in authorization_policy::DEFAULT_PERMISSIONS_OF_MERCHANT_BARBER{
-        if !permissions.iter().any(|p|p.permission_code==permission_code){
-            let permission_id=permissions::table
-                .filter(permissions::permission_code.eq(permission_code)) 
-                .filter(permissions::enabled.eq(true))
-                .select(permissions::permission_id)
-                .get_result::<Uuid>(&mut *conn)
-                .unwrap();
+    let mut ids=serde_json::from_str::<Vec<String>>(&user.permissions).unwrap();
+    for &permission_code in authorization_policy::ADMINISTRATOR_PERMISSIONS_OF_MERCHANT_BARBER{
+        let permission_id=permissions::table
+            .filter(permissions::permission_code.eq(permission_code)) 
+            .filter(permissions::enabled.eq(true))
+            .select(permissions::permission_id)
+            .get_result::<Uuid>(&mut *conn)
+            .unwrap();
 
-            permission_ids.push(permission_id);
-        }
+        ids.push(format!("{}:{}",new_merchant.merchant_id,permission_id));
     }
+    let administrator_permission_id=permissions::table
+        .filter(permissions::permission_code.eq(authorization_policy::MERCHANT_ADMINISTRATOR)) 
+        .filter(permissions::enabled.eq(true))
+        .select(permissions::permission_id)
+        .get_result::<Uuid>(&mut *conn)
+        .unwrap();
+    ids.push(format!("{}:{}",new_merchant.merchant_id,administrator_permission_id));
+
+    let barber_base_permission_id=permissions::table
+        .filter(permissions::permission_code.eq(authorization_policy::BARBER_BASE)) 
+        .filter(permissions::enabled.eq(true))
+        .select(permissions::permission_id)
+        .get_result::<Uuid>(&mut *conn)
+        .unwrap();
+    ids.push(format!("{}:{}",new_merchant.merchant_id,barber_base_permission_id));
+
     diesel::update(
         users::table
         .filter(users::user_id.eq(user.user_id))
         .filter(users::enabled.eq(true))
     )
     .set((
-        users::permissions.eq(serde_json::to_string(&permission_ids).unwrap()),
+        users::permissions.eq(serde_json::to_string(&ids).unwrap()),
         users::update_time.eq(Local::now())
     ))
     .execute(&mut *conn)
     .unwrap();
 
+    dotenv().expect("Cannot find .env file.");
     let salt=env::var("DATABASE_ENCRYPTION_SAULT").unwrap();
     let config = argon2::Config::default();
     let hash = argon2::hash_encoded(req.password.as_bytes(), salt.as_bytes(), &config).unwrap();
@@ -177,9 +191,9 @@ pub async fn register_merchant(State(pg):State<AxumPg>,mut auth: AuthSession<Axu
             (StatusCode::INTERNAL_SERVER_ERROR,e.to_string())
         })?;
         
-    auth.sign_in(user.user_id).await;
-
-    auth.axum_session.lock().unwrap().set_data(constant::MERCHANT_ID.to_owned(), new_merchant.merchant_id.to_string());
+    let merchant_id=new_merchant.merchant_id;
+    auth.sign_in(user.user_id,Some(merchant_id.to_owned())).await;
+    auth.axum_session.lock().unwrap().set_data(constant::MERCHANT_ID.to_owned(), merchant_id.to_string());
 
     Ok(Json(BarberResponse{barber,merchant}))
 }

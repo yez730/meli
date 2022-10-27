@@ -89,9 +89,6 @@ pub async fn get_appointments(
         .left_join(members::table.on(members::member_id.nullable().eq(orders::member_id)))
         .left_join(barbers::table.on(orders::barber_id.eq(barbers::barber_id)))
         .left_join(service_types::table.on(orders::service_type_id.eq(service_types::service_type_id)))
-        .filter(members::enabled.is_null().or(members::enabled.is_not_null().and(members::enabled.nullable().eq(true))))
-        .filter(barbers::enabled.is_null().or(barbers::enabled.is_not_null().and(barbers::enabled.nullable().eq(true))))
-        .filter(service_types::enabled.is_null().or(service_types::enabled.is_not_null().and(service_types::enabled.nullable().eq(true))))
         .filter(orders::enabled.eq(true))
         .filter(orders::merchant_id.eq(merchant_id))
         .filter(orders::end_time.ge(params.start_date).and(orders::start_time.lt(params.end_date)))
@@ -112,9 +109,13 @@ pub async fn get_appointments(
             title: "".into(),
             extended_props:json!({
                 "id":t.0.id,
-                "customer": if let Some(m)=t.1 {m.real_name.unwrap_or("-".into())} else {t.0.consumer_type.clone()},
-                "serviceName": t.3.map(|s|s.name).unwrap_or("-".into()),
-                "barberName":t.2.and_then(|b|b.real_name).unwrap_or("-".into()),
+                "customer": if t.0.consumer_type =="member" {
+                        if t.1.as_ref().unwrap().enabled {t.1.as_ref().unwrap().real_name.clone()} else {"".into() } // 已删除
+                    } else {
+                        t.0.consumer_type.clone()
+                    },
+                "serviceName": if t.3.as_ref().unwrap().enabled {t.3.as_ref().unwrap().name.clone()} else {"".into() }, // 已删除
+                "barberName":if t.2.as_ref().unwrap().enabled {t.2.as_ref().unwrap().real_name.clone()} else {"".into() }, // 已删除
             }),
             order:t.0,
         }).collect())
@@ -163,9 +164,6 @@ pub async fn add_appointment(
         .left_join(members::table.on(members::member_id.nullable().eq(orders::member_id)))
         .left_join(barbers::table.on(orders::barber_id.eq(barbers::barber_id)))
         .left_join(service_types::table.on(orders::service_type_id.eq(service_types::service_type_id)))
-        .filter(members::enabled.is_null().or(members::enabled.is_not_null().and(members::enabled.nullable().eq(true))))
-        .filter(barbers::enabled.is_null().or(barbers::enabled.is_not_null().and(barbers::enabled.nullable().eq(true))))
-        .filter(service_types::enabled.is_null().or(service_types::enabled.is_not_null().and(service_types::enabled.nullable().eq(true))))
         .filter(orders::enabled.eq(true))
         .filter(orders::merchant_id.eq(merchant_id))
         .filter(orders::order_id.eq(new_appointment.order_id))
@@ -179,10 +177,18 @@ pub async fn add_appointment(
             title: "".into(),
             extended_props:json!({
                 "id":t.0.id,
-                "memberId": t.1.as_ref().map(|m|m.member_id),
-                "customer": if let Some(m)=t.1 {m.real_name.unwrap_or("-".into())} else {t.0.consumer_type.clone()},
-                "serviceName": t.3.map(|s|s.name).unwrap_or("-".into()),
-                "barberName":t.2.and_then(|b|b.real_name).unwrap_or("-".into()),
+                "memberId": if t.0.consumer_type =="member" {
+                        if t.1.as_ref().unwrap().enabled {t.1.as_ref().unwrap().member_id.to_string()} else {"".into() } // 已删除
+                    } else {
+                        "".into()
+                    },
+                "customer": if t.0.consumer_type =="member" {
+                        if t.1.as_ref().unwrap().enabled {t.1.as_ref().unwrap().real_name.clone()} else {"".into() } // 已删除
+                    } else {
+                        t.0.consumer_type.clone()
+                    },
+                "serviceName": if t.3.as_ref().unwrap().enabled {t.3.as_ref().unwrap().name.clone()} else {"".into() }, // 已删除
+                "barberName":if t.2.as_ref().unwrap().enabled {t.2.as_ref().unwrap().real_name.clone()} else {"".into() }, // 已删除
                 "startTime":t.0.start_time,
                 "endTime":t.0.end_time,
                 "remark":t.0.remark,
@@ -212,9 +218,6 @@ pub async fn get_appointment(
         .left_join(members::table.on(members::member_id.nullable().eq(orders::member_id)))
         .left_join(barbers::table.on(orders::barber_id.eq(barbers::barber_id)))
         .left_join(service_types::table.on(orders::service_type_id.eq(service_types::service_type_id)))
-        .filter(members::enabled.is_null().or(members::enabled.is_not_null().and(members::enabled.nullable().eq(true))))
-        .filter(barbers::enabled.is_null().or(barbers::enabled.is_not_null().and(barbers::enabled.nullable().eq(true))))
-        .filter(service_types::enabled.is_null().or(service_types::enabled.is_not_null().and(service_types::enabled.nullable().eq(true))))
         .filter(orders::enabled.eq(true))
         .filter(orders::merchant_id.eq(merchant_id))
         .filter(orders::order_id.eq(appointment_id))
@@ -228,10 +231,18 @@ pub async fn get_appointment(
             title: "".into(),
             extended_props:json!({
                 "id":t.0.id,
-                "memberId": t.1.as_ref().map(|m|m.member_id),
-                "customer": if let Some(m)=t.1 {m.real_name.unwrap_or("-".into())} else {t.0.consumer_type.clone()},
-                "serviceName": t.3.map(|s|s.name).unwrap_or("-".into()),
-                "barberName":t.2.and_then(|b|b.real_name).unwrap_or("-".into()),
+                "memberId": if t.0.consumer_type =="member" {
+                        if t.1.as_ref().unwrap().enabled {t.1.as_ref().unwrap().member_id.to_string()} else {"".into() } // 已删除
+                    } else {
+                        "".into()
+                    },
+                "customer": if t.0.consumer_type =="member" {
+                        if t.1.as_ref().unwrap().enabled {t.1.as_ref().unwrap().real_name.clone()} else {"".into() } // 已删除
+                    } else {
+                        t.0.consumer_type.clone()
+                    },
+                "serviceName": if t.3.as_ref().unwrap().enabled {t.3.as_ref().unwrap().name.clone()} else {"".into() }, // 已删除
+                "barberName":if t.2.as_ref().unwrap().enabled {t.2.as_ref().unwrap().real_name.clone()} else {"".into() }, // 已删除
                 "startTime":t.0.start_time,
                 "endTime":t.0.end_time,
                 "remark":t.0.remark,

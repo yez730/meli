@@ -14,7 +14,7 @@ pub struct User{
 
     pub user_id: Uuid,
     pub description: String,
-    pub permissions: String,
+    pub permissions: String, // 属于 merchant 则为 `merchant_id:permission_id`，否则 `permission_id`
     pub roles: String,
     pub enabled:bool,
 
@@ -26,8 +26,8 @@ pub struct User{
 
 #[async_trait]
 impl Authentication<User, AxumPg> for User{
-    fn load_identity(user_id:Uuid,pg:AxumPg) -> auth_user::Identity{
-        let mut conn=pg.pool.get().unwrap();//TODO error
+    fn load_identity(user_id:Uuid,merchant_id:Option<Uuid>,pg:AxumPg) -> auth_user::Identity{
+        let mut conn=pg.pool.get().unwrap();
 
         let user=users::table
             .filter(users::user_id.eq(user_id))
@@ -35,8 +35,27 @@ impl Authentication<User, AxumPg> for User{
             .get_result::<User>(&mut *conn)
             .unwrap();
 
+        let mut current_permission_ids=Vec::new();
+        let ids=serde_json::from_str::<Vec<String>>(&user.permissions).unwrap();
+        for id_str in ids {
+            let mut id_iter=id_str.split(':'); // `merchant_id:permission_id` or `permission_id`
+
+            let id1=Uuid::parse_str(id_iter.next().unwrap()).unwrap();
+            let id2=id_iter.next();
+            
+            match id2 {
+                Some(permission_id) if Some(id1)==merchant_id=>{
+                    current_permission_ids.push(Uuid::parse_str(permission_id).unwrap());
+                }
+                None=>{
+                    current_permission_ids.push(id1);
+                }
+                _=>{}
+            }
+        }
+
         let permissions=permissions::table
-            .filter(permissions::permission_id.eq_any(serde_json::from_str::<Vec<Uuid>>(&user.permissions).unwrap())) 
+            .filter(permissions::permission_id.eq_any(current_permission_ids))
             .filter(permissions::enabled.eq(true))
             .get_results::<Permission>(&mut *conn)
             .unwrap();
@@ -45,7 +64,6 @@ impl Authentication<User, AxumPg> for User{
             .filter(roles::enabled.eq(true))
             .get_results::<Role>(&mut *conn)
             .unwrap();
-
 
         let identity=auth_user::Identity{
             user_id:user.user_id,
@@ -91,18 +109,32 @@ pub struct NewUser<'a>{
     pub data: Option<&'a str>,
 }
 
-#[derive(Queryable)]
+#[derive(Queryable,Serialize)]
 pub struct Permission{
+    #[serde(skip)]
     pub id: i64,
 
+    #[serde(rename="permissionId")]
     pub permission_id: Uuid,
+
+    #[serde(rename="permissionCode")]
     pub permission_code: String,
+
+    #[serde(rename="permissionName")]
     pub permission_name :String,
+
     pub description: String,
 
+    #[serde(skip)]
     pub enabled:bool,
+
+    #[serde(rename="createTime")]
     pub create_time: chrono::DateTime<Local>,
+
+    #[serde(rename="updateTime")]
     pub update_time: chrono::DateTime<Local>,
+
+    #[serde(skip)]
     pub data: Option<String>,
 }
 
@@ -144,7 +176,7 @@ pub struct Session{
     pub expiry_time: chrono::DateTime<Local>,
     pub create_time: chrono::DateTime<Local>,
     pub update_time: chrono::DateTime<Local>,
-    pub data: Option<String>,
+    pub data: String,
 }
 
 #[derive(Insertable)]
@@ -156,7 +188,7 @@ pub struct NewSession<'a> {
     pub expiry_time: chrono::DateTime<Local>,
     pub create_time: chrono::DateTime<Local>,
     pub update_time: chrono::DateTime<Local>,
-    pub data: Option<&'a str>,
+    pub data: &'a str,
 }
 
 #[derive(Queryable,Serialize)]
@@ -173,7 +205,7 @@ pub struct Member{
     pub cellphone:String,
     
     #[serde(rename ="realName")]
-    pub real_name:Option<String>,
+    pub real_name:String,
 
     pub gender:Option<String>,
 
@@ -201,7 +233,7 @@ pub struct NewMember<'a>{
     pub user_id: &'a Uuid,
     pub member_id: &'a Uuid,
     pub cellphone:&'a str,
-    pub real_name:Option<&'a str>,
+    pub real_name:&'a str,
     pub gender:Option<&'a str>,
     pub birth_day:Option<NaiveDate>,
     pub enabled:bool,
@@ -264,12 +296,12 @@ pub struct Barber{
     #[serde(rename ="merchantId")]
     pub merchant_id: Uuid,
 
-    pub cellphone:String,
+    pub cellphone:Option<String>,
 
     pub email:Option<String>,
 
     #[serde(rename ="realName")]
-    pub real_name:Option<String>,
+    pub real_name:String,
 
     #[serde(skip)]
     pub enabled:bool,
@@ -290,9 +322,9 @@ pub struct NewBarber<'a>{
     pub user_id: &'a Uuid,
     pub barber_id: &'a Uuid,
     pub merchant_id: &'a Uuid,
-    pub cellphone:&'a str,
+    pub cellphone:Option<&'a str>,
     pub email:Option<&'a str>,
-    pub real_name:Option<&'a str>,
+    pub real_name:&'a str,
     pub enabled:bool,
     pub create_time: chrono::DateTime<Local>,
     pub update_time: chrono::DateTime<Local>,

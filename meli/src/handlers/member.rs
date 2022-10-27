@@ -17,7 +17,7 @@ pub struct MemberRequest{
     pub cellphone:String,
 
     #[serde(rename ="realName")]
-    pub real_name:Option<String>,
+    pub real_name:String,
 
     pub gender:Option<String>,
 
@@ -57,15 +57,11 @@ pub async fn get_members(
             .into_boxed();
             
         if let Some(key)=search.key.as_ref(){
-            if key.len()>0{
-                query=query.filter(members::cellphone.ilike(format!("%{key}%")).or(members::real_name.ilike(format!("%{key}%"))));  
-            }
+            query=query.filter(members::cellphone.ilike(format!("%{key}%")).or(members::real_name.ilike(format!("%{key}%"))));  
         }
 
         if let Some(gender)=search.filter_gender.as_ref(){
-            if gender.len()>0{
-                query=query.filter(members::gender.eq(gender));  
-            }
+            query=query.filter(members::gender.eq(gender));  
         }
 
         query
@@ -131,7 +127,7 @@ pub async fn add_member(
 
             //TODO update member 商户不允许
 
-            tracing::info!("{}",format!("已存在会员 user_id: {}",existed_member.user_id));
+            tracing::warn!("{}",format!("已存在会员 user_id: {}",existed_member.user_id));
 
             member=existed_member;        
         } else {
@@ -139,7 +135,7 @@ pub async fn add_member(
                 user_id:  &login_info.user_id,
                 member_id: &Uuid::new_v4(),
                 cellphone:req.cellphone.as_ref(),
-                real_name:req.real_name.as_deref(),
+                real_name:req.real_name.as_ref(),
                 gender:req.gender.as_deref(),
                 birth_day:req.birth_day,
                 enabled:true,
@@ -158,7 +154,7 @@ pub async fn add_member(
         let new_user=NewUser{
             user_id: &user_id,
             description: "后台添加",
-            permissions:&serde_json::to_string(authorization_policy::DEFAULT_PERMISSIONS_OF_MEMBER).unwrap(),
+            permissions:"[]",
             roles:"[]",
             enabled:true,
             create_time: Local::now(),
@@ -188,7 +184,7 @@ pub async fn add_member(
             user_id:  &user_id,
             member_id: &Uuid::new_v4(),
             cellphone:req.cellphone.as_ref(),
-            real_name:req.real_name.as_deref(),
+            real_name:req.real_name.as_ref(),
             gender:req.gender.as_deref(),
             birth_day:req.birth_day,
             enabled:true,
@@ -277,7 +273,6 @@ pub async fn delete_member(
     Ok(())
 }
 
-// TODO 不允许商家
 pub async fn update_member(
     State(pg):State<AxumPg>,
     Path(member_id):Path<Uuid>, 
@@ -449,8 +444,6 @@ pub async fn get_orders_by_member_id(
             .left_join(service_types::table.on(orders::service_type_id.eq(service_types::service_type_id)))
             .filter(members::enabled.eq(true))
             .filter(members::member_id.eq(member_id))
-            .filter(barbers::enabled.is_null().or(barbers::enabled.is_not_null().and(barbers::enabled.nullable().eq(true))))
-            .filter(service_types::enabled.is_null().or(service_types::enabled.is_not_null().and(service_types::enabled.nullable().eq(true))))
             .filter(orders::enabled.eq(true))
             .filter(orders::merchant_id.eq(merchant_id))
             .into_boxed()
@@ -473,20 +466,20 @@ pub async fn get_orders_by_member_id(
                 } else {
                     "进店顾客".into()
                 },
-            member_name:if t.0.consumer_type =="member" {
-                    t.1.as_ref().and_then(|m|m.real_name.clone()).unwrap_or("-".into())
-                } else {
-                    "".into()
-                },
+            member_name: if t.0.consumer_type =="member" {
+                if t.1.as_ref().unwrap().enabled {t.1.as_ref().unwrap().real_name.clone() } else {"-".into() }
+            } else {
+                "".into()
+            },
             member_cellphone:if t.0.consumer_type =="member" {
-                    t.1.as_ref().map(|m|m.cellphone.clone()).unwrap_or("-".into())
-                } else {
-                    "".into()
-                },
+                if t.1.as_ref().unwrap().enabled {t.1.as_ref().unwrap().cellphone.clone() } else {"-".into() }
+            } else {
+                "".into()
+            },
             amount:t.0.amount,
             total_minutes:(t.0.end_time-t.0.start_time).num_minutes(),
             payment_type: if t.0.payment_type=="member" {"会员充值".into()} else {"现金".into()},
-            barber_name:t.2.and_then(|b|b.real_name).unwrap_or("-".into()),
+            barber_name: if t.2.as_ref().unwrap().enabled {t.2.as_ref().unwrap().real_name.clone()} else {"-".into()},
             create_time:t.0.create_time,
         }).collect())
         .unwrap();
@@ -535,10 +528,10 @@ pub async fn get_recharge_records_by_member_id(
         .get_results::<(RechargeRecord,Option<Member>,Option<Barber>)>(&mut *conn)
         .map(|v|v.into_iter().map(|t|RechargeRecordResponse{
             recharge_record_id:t.0.recharge_record_id,
-            member_name:t.1.as_ref().and_then(|m|m.real_name.clone()).unwrap_or("-".into()),
-            member_cellphone:t.1.as_ref().map(|m|m.cellphone.clone()).unwrap_or("-".into()),
+            member_name: if t.1.as_ref().unwrap().enabled { t.1.as_ref().unwrap().real_name.clone()} else {"-".into() },
+            member_cellphone:if t.1.as_ref().unwrap().enabled { t.1.as_ref().unwrap().cellphone.clone()} else {"-".into() },
             amount:t.0.amount,
-            barber_name:t.2.and_then(|b|b.real_name).unwrap_or("-".into()),
+            barber_name:if t.2.as_ref().unwrap().enabled { t.2.as_ref().unwrap().real_name.clone()} else {"-".into() },
             crate_time:t.0.create_time,
         }).collect())
         .unwrap();

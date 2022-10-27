@@ -57,7 +57,7 @@ impl AxumDatabaseTrait for AxumPg{
                     init_time: session_data.init_time,
                     create_time: Local::now(),
                     update_time: Local::now(),
-                    data: Some(data_str.as_str()),
+                    data: data_str.as_str(),
                 };
                 diesel::insert_into(sessions::table).values(&new_session)
                     .execute(&mut *conn)
@@ -69,31 +69,22 @@ impl AxumDatabaseTrait for AxumPg{
     }
 
     async fn load(&self, session_id: &Uuid) -> Result<database::SessionData, anyhow::Error>{
-        use std::result::Result::Ok;
-        let mut conn=self.pool.get()
-            .map_err(|e| anyhow!("Get connection error: {}",e))?;
+        let mut conn=self.pool.get().unwrap();
         
-        let session=sessions::table
-            .filter(sessions::session_id.eq(session_id)) 
-            .get_result::<Session>(&mut *conn);
-
-        match session {
-            Err(e)=>Err(anyhow!("Get connection error: {}",e)),
-            Ok(session)=>{
-                let data=match session.data {
-                    Some(data) if serde_json::from_str::<HashMap<String,String>>(&data).is_ok()
-                        =>serde_json::from_str::<HashMap<String,String>>(&data).unwrap(),
-                    _=>Default::default(),
-                };
-                let session_data=database::SessionData{
+        sessions::table
+            .filter(sessions::session_id.eq(session_id))
+            .get_result::<Session>(&mut *conn)
+            .map(|session|{
+                let data=serde_json::from_str::<HashMap<String,String>>(&session.data).unwrap();
+                
+                database::SessionData{
                     session_id:session.session_id,
                     user_id:session.user_id,
                     init_time:session.init_time,
                     expiry_time:session.expiry_time,
-                    data:data,
-                };
-                Ok(session_data)
-            }
-        }
+                    data,
+                }
+            })
+            .map_err(|e|anyhow!("Execute error: {}",e))
     }
 }

@@ -3,6 +3,7 @@ use std::env;
 use axum::{http::StatusCode, Json, extract::State};
 use axum_session_authentication_middleware::session::AuthSession;
 use chrono::Local;
+use dotenvy::dotenv;
 use email_address::EmailAddress;
 use regex::Regex;
 use serde::{Deserialize, Serialize};
@@ -53,10 +54,10 @@ pub async fn get_current_barber(
 
 #[derive(Deserialize)]
 pub struct UpdateInfoRequest{
-    pub cellphone:Option<String>,
-
     #[serde(rename="realName")]
-    pub real_name:Option<String>,
+    pub real_name:String,
+
+    pub cellphone:Option<String>,
 
     pub email:Option<String>,
 
@@ -132,6 +133,7 @@ pub async fn update_info(
     }
 
     if req.old_password.is_some(){
+        dotenv().expect("Cannot find .env file.");
         let salt = env::var("DATABASE_ENCRYPTION_SAULT").unwrap();
         let config = argon2::Config::default();
 
@@ -206,7 +208,7 @@ pub async fn update_info(
         .filter(barbers::enabled.eq(true))
     )
     .set((
-        barbers::cellphone.eq(req.cellphone.unwrap()), //TODO nullale
+        barbers::cellphone.eq(req.cellphone),
         barbers::real_name.eq(req.real_name), 
         barbers::email.eq(req.email),
         barbers::update_time.eq(Local::now())

@@ -9,7 +9,7 @@ CREATE TABLE sessions (
 
     create_time TIMESTAMPTZ NOT NULL,
     update_time TIMESTAMPTZ NOT NULL,
-    data TEXT NULL
+    data TEXT NOT NULL
 );
 
 CREATE UNIQUE INDEX sessions_session_id_key ON sessions

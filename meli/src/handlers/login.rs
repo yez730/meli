@@ -58,9 +58,11 @@ pub async fn barber_login_by_password(State(pg):State<AxumPg>,mut auth: AuthSess
     if barber_response.is_none(){
         return Err((StatusCode::BAD_REQUEST,"商户登录失败".into()));
     }
-    auth.sign_in(login_info.as_ref().unwrap().user_id).await;
 
-    auth.axum_session.lock().unwrap().set_data(constant::MERCHANT_ID.to_owned(), barber_response.as_ref().unwrap().merchant.merchant_id.to_string());
+    let merchant_id=barber_response.as_ref().unwrap().merchant.merchant_id;
+
+    auth.sign_in(login_info.as_ref().unwrap().user_id,Some(merchant_id)).await;
+    auth.axum_session.lock().unwrap().set_data(constant::MERCHANT_ID.to_owned(), merchant_id.to_string());
     
     Ok(Json(barber_response.unwrap()))
 }
