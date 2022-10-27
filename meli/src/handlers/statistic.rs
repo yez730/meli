@@ -2,7 +2,7 @@ use axum::{Json, http::StatusCode, extract::{State, Query}};
 use axum_session_authentication_middleware::session::AuthSession;
 use bigdecimal::BigDecimal;
 use chrono::Local;
-use diesel::{QueryDsl, NullableExpressionMethods, sql_types::Nullable};
+use diesel::{QueryDsl, NullableExpressionMethods};
 use serde::Serialize;
 use uuid::Uuid;
 use diesel::{
@@ -28,6 +28,9 @@ pub struct OrderResponse{
 
     #[serde(rename="memberCellphone")]
     pub member_cellphone:String,
+
+    #[serde(rename="totalMinutes")]
+    pub total_minutes:i64,
 
     pub amount:BigDecimal,
 
@@ -103,6 +106,7 @@ pub async fn get_orders(
                     "".into()
                 },
             amount:t.0.amount,
+            total_minutes:(t.0.end_time-t.0.start_time).num_minutes(),
             payment_type: if t.0.payment_type=="member" {"会员充值".into()} else {"现金".into()},
             barber_name:t.2.and_then(|b|b.real_name).unwrap_or("-".into()),
             create_time:t.0.create_time,

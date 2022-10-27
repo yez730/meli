@@ -55,6 +55,9 @@ async fn main(){
         .route("/member/:member_id", get(get_member).post(update_member).delete(delete_member))
         .route("/member/recharge/:member_id", post(recharge))
 
+        .route("/member/orders/:member_id", get(get_orders_by_member_id))
+        .route("/member/recharge_records/:member_id", get(get_recharge_records_by_member_id))
+
         .route("/service_types", get(get_service_types).post(add_service_type))
         .route("/service_type/:service_type_id", get(get_service_type).post(update_service_type).delete(delete_service_type))
         
