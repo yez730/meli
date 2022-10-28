@@ -384,6 +384,10 @@ pub async fn recharge(
         .map_err(|_|{
             (StatusCode::NOT_FOUND,"会员不存在".to_string())
         })?;
+    
+    if req.amount<=BigDecimal::zero() {
+        return Err((StatusCode::BAD_REQUEST,"充值金额必须大于0".to_string()));
+    }
 
     diesel::update(
         merchant_members::table
