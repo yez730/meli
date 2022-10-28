@@ -327,7 +327,7 @@ pub async fn delete_barber(
 
     let merchant_id=Uuid::parse_str(auth.axum_session.lock().unwrap().get_data(constant::MERCHANT_ID)).unwrap();
 
-    let _existed=barbers::table
+    let barber=barbers::table
         .filter(barbers::enabled.eq(true))
         .filter(barbers::barber_id.eq(barber_id))
         .filter(barbers::merchant_id.eq(merchant_id))
@@ -335,6 +335,25 @@ pub async fn delete_barber(
         .map_err(|_|{
             (StatusCode::NOT_FOUND,"理发师不存在".to_string())
         })?;
+
+    let administrator_permission_id=permissions::table
+        .filter(permissions::permission_code.eq(authorization_policy::MERCHANT_ADMINISTRATOR)) 
+        .filter(permissions::enabled.eq(true))
+        .select(permissions::permission_id)
+        .get_result::<Uuid>(&mut *conn)
+        .unwrap();
+    let permissions=users::table
+        .filter(users::enabled.eq(true))
+        .filter(users::user_id.eq(barber.user_id))
+        .select(users::permissions)
+        .get_result::<String>(&mut *conn)
+        .unwrap();
+
+    let ids=serde_json::from_str::<Vec<String>>(permissions.as_str()).unwrap();
+    let is_administrator=ids.contains(&format!("{}:{}",merchant_id,administrator_permission_id));
+    if is_administrator{
+        return Err((StatusCode::NOT_FOUND,"门店所有者无法删除".to_string()));
+    }
 
     diesel::update(
         barbers::table
@@ -499,7 +518,6 @@ pub async fn update_barber(
     let mut ids=serde_json::from_str::<Vec<String>>(permissions.as_str()).unwrap();
     let is_administrator=ids.contains(&format!("{}:{}",merchant_id,administrator_permission_id));
     if !is_administrator{
-        tracing::debug!("is_administrator");
         ids.retain(|id_str|{
             let mut id_iter=id_str.split(':'); // `merchant_id:permission_id` or `permission_id`
     
