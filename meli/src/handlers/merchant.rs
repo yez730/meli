@@ -203,6 +203,8 @@ pub async fn add_barber(
                 .values(&login_info)
                 .execute(&mut *conn)
                 .unwrap();
+        } else {
+            //TODO how dealing with existing user?
         }
     }
 
@@ -240,7 +242,14 @@ pub async fn add_barber(
             .values(&login_info)
             .execute(&mut *conn)
             .unwrap();
+        } else {
+            //TODO how dealing with existing user?
         }
+    }
+
+    if user.is_none() {
+        //TODO  how
+        return Err((StatusCode::BAD_REQUEST,"添加失败".to_string()));
     }
 
     let new_barber=NewBarber{
