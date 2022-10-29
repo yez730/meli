@@ -74,6 +74,8 @@ pub async fn register_merchant(State(pg):State<AxumPg>,mut auth: AuthSession<Axu
 
     let user:User;
 
+    //TODO how 验证邮箱密码有效性？
+
     let login_info_user=login_infos::table.inner_join(users::table.on(login_infos::user_id.eq(users::user_id)))
         .filter(login_infos::enabled.eq(true))
         .filter(users::enabled.eq(true))
@@ -172,6 +174,8 @@ pub async fn register_merchant(State(pg):State<AxumPg>,mut auth: AuthSession<Axu
     .execute(&mut *conn)
     .unwrap();
 
+
+    //TODO how 已注册用户的禁止再修改密码？
     dotenv().expect("Cannot find .env file.");
     let salt=env::var("DATABASE_ENCRYPTION_SAULT").unwrap();
     let config = argon2::Config::default();

@@ -41,7 +41,7 @@ async fn main(){
         .route("/identity/logout", get(logout))
         .route("/identity/current", get(get_current_identity))
 
-        .route("/register/merchant", get(register_merchant))
+        .route("/register/merchant", post(register_merchant))
         
         .route("/barber", get(get_current_barber).post(update_info))
 
