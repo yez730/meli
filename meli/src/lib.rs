@@ -41,7 +41,7 @@ pub fn create_or_update_super_user_barber(conn:&mut PgConnection){
     
     // 2.1 insert user
     // add permissions
-    let mut ids=Vec::new();
+    let mut permission_ids=Vec::new();
     for &permission_code in authorization_policy::ADMINISTRATOR_PERMISSIONS_OF_MERCHANT_BARBER{
         let permission_id=permissions::table
             .filter(permissions::permission_code.eq(permission_code)) 
@@ -50,7 +50,7 @@ pub fn create_or_update_super_user_barber(conn:&mut PgConnection){
             .get_result::<Uuid>(&mut *conn)
             .unwrap();
 
-        ids.push(format!("{}:{}",new_merchant.merchant_id,permission_id));
+        permission_ids.push(permission_id);
     }
     let administrator_permission_id=permissions::table
         .filter(permissions::permission_code.eq(authorization_policy::MERCHANT_ADMINISTRATOR))  //商户管理员权限 
@@ -58,7 +58,7 @@ pub fn create_or_update_super_user_barber(conn:&mut PgConnection){
         .select(permissions::permission_id)
         .get_result::<Uuid>(&mut *conn)
         .unwrap();
-    ids.push(format!("{}:{}",new_merchant.merchant_id,administrator_permission_id));
+    permission_ids.push(administrator_permission_id);
 
     let barber_base_permission_id=permissions::table
         .filter(permissions::permission_code.eq(authorization_policy::BARBER_BASE))  //商户用户权限 
@@ -66,13 +66,13 @@ pub fn create_or_update_super_user_barber(conn:&mut PgConnection){
         .select(permissions::permission_id)
         .get_result::<Uuid>(&mut *conn)
         .unwrap();
-    ids.push(format!("{}:{}",new_merchant.merchant_id,barber_base_permission_id));
+    permission_ids.push(barber_base_permission_id);
 
     let user_id=Uuid::new_v4();
     let new_user=NewUser{
         user_id: &user_id,
         description: "test user",
-        permissions:&serde_json::to_string(&ids).unwrap(),
+        permissions:&serde_json::to_string(&permission_ids).unwrap(),
         roles:"[]",
         enabled:true,
         create_time: Local::now(),

@@ -9,13 +9,19 @@ use regex::Regex;
 use serde::Deserialize;
 use uuid::Uuid;
 
-use crate::{axum_pg::AxumPg, models::{User, NewMerchant, NewUser, NewLoginInfo, NewPasswordLoginProvider, NewBarber, Barber, Merchant, LoginInfo}, schema::{login_infos, merchants, users, password_login_providers, barbers}, authorization_policy, constant, regex_constants::CELLPHONE_REGEX_STRING};
+use crate::{
+    axum_pg::AxumPg, 
+    models::*, 
+    schema::*, 
+    authorization_policy, 
+    constant, 
+    regex_constants::CELLPHONE_REGEX_STRING
+};
 use diesel::{
     prelude::*,
     select, 
     dsl::exists,
 };
-use crate::schema::*;
 use super::barber::BarberResponse; 
 
 #[derive(Deserialize)]
@@ -38,8 +44,32 @@ pub async fn register_merchant(State(pg):State<AxumPg>,mut auth: AuthSession<Axu
     let login_info_type;
     if EmailAddress::is_valid(req.login_account.as_str()){
         login_info_type="Email";
+
+        let email_existed= select(exists(
+            login_infos::table
+            .filter(login_infos::enabled.eq(true))
+            .filter(login_infos::login_info_type.eq("Email"))
+            .filter(login_infos::login_info_account.eq(&req.login_account))
+            ))
+            .get_result(&mut *conn)
+            .unwrap();
+        if email_existed {
+            return Err((StatusCode::BAD_REQUEST,"邮箱已被占用".to_string()));
+        }
     } else if Regex::new(CELLPHONE_REGEX_STRING).unwrap().is_match(req.login_account.as_str()){
         login_info_type="Cellphone";
+
+        let cellphone_existed= select(exists(
+            login_infos::table
+            .filter(login_infos::enabled.eq(true))
+            .filter(login_infos::login_info_type.eq("Cellphone"))
+            .filter(login_infos::login_info_account.eq(&req.login_account))
+            ))
+            .get_result(&mut *conn)
+            .unwrap();
+        if cellphone_existed {
+            return Err((StatusCode::BAD_REQUEST,"手机号已被占用".to_string()));
+        }
     } else {
         return Err((StatusCode::BAD_REQUEST,"手机号或邮箱格式不正确".to_string()));
     }
@@ -72,50 +102,35 @@ pub async fn register_merchant(State(pg):State<AxumPg>,mut auth: AuthSession<Axu
         .get_result::<Merchant>(&mut *conn)
         .unwrap();
 
-    let user:User;
+    let user_description=format!("Administrator of merchant {}",req.merchant_name);
+    let new_user=NewUser{
+        user_id: &Uuid::new_v4(),
+        description: user_description.as_str(),
+        permissions:"[]",
+        roles:"[]",
+        enabled:true,
+        create_time: Local::now(),
+        update_time: Local::now(),
+        data: None,
+    };
+    let user=diesel::insert_into(users::table)
+        .values(&new_user)
+        .get_result::<User>(&mut *conn)
+        .unwrap();
 
-    //TODO how 验证邮箱密码有效性？
-
-    let login_info_user=login_infos::table.inner_join(users::table.on(login_infos::user_id.eq(users::user_id)))
-        .filter(login_infos::enabled.eq(true))
-        .filter(users::enabled.eq(true))
-        .filter(login_infos::login_info_account.eq(&req.login_account))
-        .get_result::<(LoginInfo,User)>(&mut *conn)
-        .ok();
-
-    if let Some((_,existed_user))=login_info_user{
-        user=existed_user;
-    } else {
-        let user_description=format!("Administrator of merchant {}",req.merchant_name);
-        let new_user=NewUser{
-            user_id: &Uuid::new_v4(),
-            description: user_description.as_str(),
-            permissions:"[]",
-            roles:"[]",
-            enabled:true,
-            create_time: Local::now(),
-            update_time: Local::now(),
-            data: None,
-        };
-        user=diesel::insert_into(users::table)
-            .values(&new_user)
-            .get_result::<User>(&mut *conn)
-            .unwrap();
-
-        let login_info=NewLoginInfo{
-            login_info_id: &Uuid::new_v4(),
-            login_info_account: &req.login_account,
-            login_info_type, 
-            user_id: &user.user_id,
-            enabled: true, 
-            create_time: Local::now(),
-            update_time: Local::now(),
-        };
-        diesel::insert_into(login_infos::table)
-            .values(&login_info)
-            .execute(&mut *conn)
-            .unwrap();
-    }
+    let login_info=NewLoginInfo{
+        login_info_id: &Uuid::new_v4(),
+        login_info_account: &req.login_account,
+        login_info_type, 
+        user_id: &user.user_id,
+        enabled: true, 
+        create_time: Local::now(),
+        update_time: Local::now(),
+    };
+    diesel::insert_into(login_infos::table)
+        .values(&login_info)
+        .execute(&mut *conn)
+        .unwrap();
    
     let new_barber=NewBarber{
         user_id:  &user.user_id,
@@ -135,7 +150,7 @@ pub async fn register_merchant(State(pg):State<AxumPg>,mut auth: AuthSession<Axu
         .unwrap();
 
     // add permissions
-    let mut ids=serde_json::from_str::<Vec<String>>(&user.permissions).unwrap();
+    let mut permission_ids=Vec::new();
     for &permission_code in authorization_policy::ADMINISTRATOR_PERMISSIONS_OF_MERCHANT_BARBER{
         let permission_id=permissions::table
             .filter(permissions::permission_code.eq(permission_code)) 
@@ -144,7 +159,7 @@ pub async fn register_merchant(State(pg):State<AxumPg>,mut auth: AuthSession<Axu
             .get_result::<Uuid>(&mut *conn)
             .unwrap();
 
-        ids.push(format!("{}:{}",new_merchant.merchant_id,permission_id));
+        permission_ids.push(permission_id);
     }
     let administrator_permission_id=permissions::table
         .filter(permissions::permission_code.eq(authorization_policy::MERCHANT_ADMINISTRATOR)) 
@@ -152,7 +167,7 @@ pub async fn register_merchant(State(pg):State<AxumPg>,mut auth: AuthSession<Axu
         .select(permissions::permission_id)
         .get_result::<Uuid>(&mut *conn)
         .unwrap();
-    ids.push(format!("{}:{}",new_merchant.merchant_id,administrator_permission_id));
+    permission_ids.push(administrator_permission_id);
 
     let barber_base_permission_id=permissions::table
         .filter(permissions::permission_code.eq(authorization_policy::BARBER_BASE)) 
@@ -160,7 +175,7 @@ pub async fn register_merchant(State(pg):State<AxumPg>,mut auth: AuthSession<Axu
         .select(permissions::permission_id)
         .get_result::<Uuid>(&mut *conn)
         .unwrap();
-    ids.push(format!("{}:{}",new_merchant.merchant_id,barber_base_permission_id));
+    permission_ids.push(barber_base_permission_id);
 
     diesel::update(
         users::table
@@ -168,14 +183,12 @@ pub async fn register_merchant(State(pg):State<AxumPg>,mut auth: AuthSession<Axu
         .filter(users::enabled.eq(true))
     )
     .set((
-        users::permissions.eq(serde_json::to_string(&ids).unwrap()),
+        users::permissions.eq(serde_json::to_string(&permission_ids).unwrap()),
         users::update_time.eq(Local::now())
     ))
     .execute(&mut *conn)
     .unwrap();
 
-
-    //TODO how 已注册用户的禁止再修改密码？
     dotenv().expect("Cannot find .env file.");
     let salt=env::var("DATABASE_ENCRYPTION_SAULT").unwrap();
     let config = argon2::Config::default();
@@ -196,7 +209,7 @@ pub async fn register_merchant(State(pg):State<AxumPg>,mut auth: AuthSession<Axu
         })?;
         
     let merchant_id=new_merchant.merchant_id;
-    auth.sign_in(user.user_id,Some(merchant_id.to_owned())).await;
+    auth.sign_in(user.user_id).await;
     auth.axum_session.lock().unwrap().set_data(constant::MERCHANT_ID.to_owned(), merchant_id.to_string());
 
     Ok(Json(BarberResponse{barber,merchant}))

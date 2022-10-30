@@ -10,7 +10,9 @@ use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 use crate::{
     schema::*,
-    models::{Barber,Merchant, LoginInfo, NewLoginInfo}, authorization_policy, regex_constants::CELLPHONE_REGEX_STRING
+    models::*, 
+    authorization_policy, 
+    regex_constants::CELLPHONE_REGEX_STRING
 };
 use diesel::{
     prelude::*, // for .filter

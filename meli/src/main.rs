@@ -45,8 +45,6 @@ async fn main(){
         
         .route("/barber", get(get_current_barber).post(update_info))
 
-        .route("/merchant/all_merchants_by_account", get(get_merchants_by_login_account))
-
         .route("/merchant/current", get(get_current_merchant))
         .route("/merchant/barbers", get(get_barbers).post(add_barber))
         .route("/merchant/barber/:barber_id", get(get_barber).post(update_barber).delete(delete_barber))

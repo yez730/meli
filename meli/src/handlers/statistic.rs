@@ -2,13 +2,20 @@ use axum::{Json, http::StatusCode, extract::{State, Query}};
 use axum_session_authentication_middleware::session::AuthSession;
 use bigdecimal::BigDecimal;
 use chrono::Local;
-use diesel::{QueryDsl, NullableExpressionMethods};
+use diesel::QueryDsl;
 use serde::Serialize;
 use uuid::Uuid;
 use diesel::{
     prelude::*, // for .filter
 }; 
-use crate::{models::{Order, User, Member, Barber, ServiceType, RechargeRecord}, authorization_policy, axum_pg::AxumPg, constant, schema::*,my_date_format};
+use crate::{
+    models::*, 
+    authorization_policy, 
+    axum_pg::AxumPg, 
+    constant, 
+    schema::*,
+    my_date_format
+};
 
 use super::{PaginatedListResponse, PaginatedListRequest, Search};
 
@@ -59,7 +66,7 @@ pub async fn get_orders(
 
     let fn_get_query=||{
         let mut query=orders::table
-            .left_join(members::table.on(members::member_id.nullable().eq(orders::member_id)))
+            .left_join(merchant_members::table.on(merchant_members::member_id.nullable().eq(orders::member_id)))
             .left_join(barbers::table.on(orders::barber_id.eq(barbers::barber_id)))
             .left_join(service_types::table.on(orders::service_type_id.eq(service_types::service_type_id)))
             .filter(orders::enabled.eq(true))
@@ -67,7 +74,7 @@ pub async fn get_orders(
             .into_boxed();
         
         if let Some(key)=search.key.as_ref() {
-            query=query.filter(members::real_name.ilike(format!("%{key}%")));   
+            query=query.filter(merchant_members::real_name.ilike(format!("%{key}%")));   
         }
 
         query
@@ -81,7 +88,7 @@ pub async fn get_orders(
         .order(orders::create_time.desc())
         .limit(params.page_size)
         .offset(params.page_index*params.page_size)
-        .get_results::<(Order,Option<Member>,Option<Barber>,Option<ServiceType>)>(&mut *conn)
+        .get_results::<(Order,Option<MerchantMember>,Option<Barber>,Option<ServiceType>)>(&mut *conn)
         .map(|v|v.into_iter().map(|t|OrderResponse{
             order_id:t.0.order_id,
             service_name:if t.3.as_ref().unwrap().enabled { t.3.as_ref().unwrap().name.clone() } else { "-".into()}, //TODO 冗余  已删除
@@ -147,14 +154,14 @@ pub async fn get_recharge_records(
 
     let fn_get_query=||{
         let mut query=recharge_records::table
-        .left_join(members::table.on(recharge_records::member_id.eq(members::member_id)))
+        .left_join(merchant_members::table.on(recharge_records::member_id.eq(merchant_members::member_id)))
         .left_join(barbers::table.on(recharge_records::barber_id.eq(barbers::barber_id)))
         .filter(recharge_records::enabled.eq(true))
         .filter(recharge_records::merchant_id.eq(merchant_id))
         .into_boxed();
         
         if let Some(key)=search.key.as_ref() {
-            query=query.filter(members::real_name.ilike(format!("%{key}%"))); 
+            query=query.filter(merchant_members::real_name.ilike(format!("%{key}%"))); 
         }
 
         query
@@ -168,7 +175,7 @@ pub async fn get_recharge_records(
         .order(recharge_records::create_time.desc())
         .limit(params.page_size)
         .offset(params.page_index*params.page_size)
-        .get_results::<(RechargeRecord,Option<Member>,Option<Barber>)>(&mut *conn)
+        .get_results::<(RechargeRecord,Option<MerchantMember>,Option<Barber>)>(&mut *conn)
         .map(|v|v.into_iter().map(|t|RechargeRecordResponse{
             recharge_record_id:t.0.recharge_record_id,
             member_name: if t.1.as_ref().unwrap().enabled {t.1.as_ref().unwrap().real_name.clone()} else { "-".into()},

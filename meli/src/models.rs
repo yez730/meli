@@ -26,7 +26,7 @@ pub struct User{
 
 #[async_trait]
 impl Authentication<User, AxumPg> for User{
-    fn load_identity(user_id:Uuid,merchant_id:Option<Uuid>,pg:AxumPg) -> auth_user::Identity{
+    fn load_identity(user_id:Uuid,pg:AxumPg) -> auth_user::Identity{
         let mut conn=pg.pool.get().unwrap();
 
         let user=users::table
@@ -35,27 +35,8 @@ impl Authentication<User, AxumPg> for User{
             .get_result::<User>(&mut *conn)
             .unwrap();
 
-        let mut current_permission_ids=Vec::new();
-        let ids=serde_json::from_str::<Vec<String>>(&user.permissions).unwrap();
-        for id_str in ids {
-            let mut id_iter=id_str.split(':'); // `merchant_id:permission_id` or `permission_id`
-
-            let id1=Uuid::parse_str(id_iter.next().unwrap()).unwrap();
-            let id2=id_iter.next();
-            
-            match id2 {
-                Some(permission_id) if Some(id1)==merchant_id=>{
-                    current_permission_ids.push(Uuid::parse_str(permission_id).unwrap());
-                }
-                None=>{
-                    current_permission_ids.push(id1);
-                }
-                _=>{}
-            }
-        }
-
         let permissions=permissions::table
-            .filter(permissions::permission_id.eq_any(current_permission_ids))
+            .filter(permissions::permission_id.eq_any(serde_json::from_str::<Vec<Uuid>>(&user.permissions).unwrap()))
             .filter(permissions::enabled.eq(true))
             .get_results::<Permission>(&mut *conn)
             .unwrap();
@@ -192,59 +173,6 @@ pub struct NewSession<'a> {
 }
 
 #[derive(Queryable,Serialize)]
-pub struct Member{
-    #[serde(skip)]
-    pub id: i64,
-
-    #[serde(rename ="userId")]
-    pub user_id: Uuid,
-
-    #[serde(rename ="memberId")]
-    pub member_id: Uuid,
-    
-    pub cellphone:String,
-    
-    #[serde(rename ="realName")]
-    pub real_name:String,
-
-    pub gender:Option<String>,
-
-    #[serde(rename ="birthDay")]
-    pub birth_day:Option<NaiveDate>,
-
-    #[serde(skip)]
-    pub enabled:bool,
-
-    #[serde(with = "my_date_format",rename ="createTime")]
-    pub create_time: chrono::DateTime<Local>,
-
-    #[serde(with = "my_date_format",rename ="updateTime")]
-    pub update_time: chrono::DateTime<Local>,
-
-    #[serde(skip)]
-    pub data: Option<String>,
-        
-    pub remark:Option<String>,
-}
-
-#[derive(Insertable)]
-#[diesel(table_name=members)]
-pub struct NewMember<'a>{
-    pub user_id: &'a Uuid,
-    pub member_id: &'a Uuid,
-    pub cellphone:&'a str,
-    pub real_name:&'a str,
-    pub gender:Option<&'a str>,
-    pub birth_day:Option<NaiveDate>,
-    pub enabled:bool,
-    pub create_time: chrono::DateTime<Local>,
-    pub update_time: chrono::DateTime<Local>,
-    pub data: Option<&'a str>,
-    
-    pub remark:Option<&'a str>,
-}
-
-#[derive(Queryable,Serialize)]
 pub struct MerchantMember{
     #[serde(skip)]
     pub id: i64,
@@ -252,7 +180,7 @@ pub struct MerchantMember{
     #[serde(rename ="merchantId")]
     pub merchant_id: Uuid,
 
-    #[serde(skip)]
+    #[serde(rename ="memberId")]
     pub member_id: Uuid,
 
     pub balance:BigDecimal,
@@ -268,6 +196,14 @@ pub struct MerchantMember{
 
     #[serde(skip)]
     pub data: Option<String>,
+
+    pub cellphone:String,
+    #[serde(rename ="realName")]
+    pub real_name:String,
+    pub gender:Option<String>,
+    #[serde(rename ="birthDay")]
+    pub birth_day:Option<NaiveDate>,
+    pub remark:Option<String>,
 }
 
 #[derive(Insertable)]
@@ -280,6 +216,12 @@ pub struct NewMerchantMember<'a>{
     pub create_time: chrono::DateTime<Local>,
     pub update_time: chrono::DateTime<Local>,
     pub data: Option<&'a str>,
+
+    pub cellphone:&'a str,
+    pub real_name:&'a str,
+    pub gender:Option<&'a str>,
+    pub birth_day:Option<NaiveDate>,
+    pub remark:Option<&'a str>,
 }
 
 #[derive(Queryable,Serialize,Clone)]

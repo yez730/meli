@@ -1,7 +1,6 @@
 use axum::{http::StatusCode, Json, extract::State};
 use axum_session_authentication_middleware::session::AuthSession;
 use serde::Deserialize;
-use uuid::Uuid;
 use crate::{
     schema::*,
     models::{Barber, Merchant, LoginInfo, PasswordLoginProvider}
@@ -14,9 +13,6 @@ use super::barber::BarberResponse;
 
 #[derive(Deserialize)]
 pub struct BarberLoginRequest{
-    #[serde(rename ="merchantId")]
-    pub merchant_id:Uuid,
-
     pub account:String, //cellphone or email
 
     pub password:String,
@@ -49,7 +45,6 @@ pub async fn barber_login_by_password(State(pg):State<AxumPg>,mut auth: AuthSess
     let barber_response=barbers::table
         .inner_join(merchants::table.on(barbers::merchant_id.eq(merchants::merchant_id)))
         .filter(barbers::enabled.eq(true))
-        .filter(barbers::merchant_id.eq(req.merchant_id))
         .filter(barbers::user_id.eq(login_info.as_ref().unwrap().user_id))
         .filter(merchants::enabled.eq(true))
         .get_result::<(Barber,Merchant)>(&mut *conn)
@@ -61,7 +56,7 @@ pub async fn barber_login_by_password(State(pg):State<AxumPg>,mut auth: AuthSess
 
     let merchant_id=barber_response.as_ref().unwrap().merchant.merchant_id;
 
-    auth.sign_in(login_info.as_ref().unwrap().user_id,Some(merchant_id)).await;
+    auth.sign_in(login_info.as_ref().unwrap().user_id).await;
     auth.axum_session.lock().unwrap().set_data(constant::MERCHANT_ID.to_owned(), merchant_id.to_string());
     
     Ok(Json(barber_response.unwrap()))

@@ -8,7 +8,9 @@ use uuid::Uuid;
 use random_color::RandomColor;
 use crate::{
     schema::*,
-    models::{Order, NewOrder, Member, Barber, ServiceType}, authorization_policy, constant
+    models::*, 
+    authorization_policy, 
+    constant
 };
 use diesel::prelude::*;
 use crate::{models::User, axum_pg::AxumPg};
@@ -86,7 +88,7 @@ pub async fn get_appointments(
     let merchant_id=Uuid::parse_str(auth.axum_session.lock().unwrap().get_data(constant::MERCHANT_ID)).unwrap();
 
     let mut query=orders::table
-        .left_join(members::table.on(members::member_id.nullable().eq(orders::member_id)))
+        .left_join(merchant_members::table.on(merchant_members::member_id.nullable().eq(orders::member_id)))
         .left_join(barbers::table.on(orders::barber_id.eq(barbers::barber_id)))
         .left_join(service_types::table.on(orders::service_type_id.eq(service_types::service_type_id)))
         .filter(orders::enabled.eq(true))
@@ -99,7 +101,7 @@ pub async fn get_appointments(
     }
 
     let data= query.order(orders::create_time.desc())
-        .get_results::<(Order,Option<Member>,Option<Barber>,Option<ServiceType>)>(&mut *conn)
+        .get_results::<(Order,Option<MerchantMember>,Option<Barber>,Option<ServiceType>)>(&mut *conn)
         .map(|v|v.into_iter().map(|t|Event{
             all_day:false,
             editable:false,
@@ -161,13 +163,13 @@ pub async fn add_appointment(
         .unwrap();
 
     let event=orders::table
-        .left_join(members::table.on(members::member_id.nullable().eq(orders::member_id)))
+        .left_join(merchant_members::table.on(merchant_members::member_id.nullable().eq(orders::member_id)))
         .left_join(barbers::table.on(orders::barber_id.eq(barbers::barber_id)))
         .left_join(service_types::table.on(orders::service_type_id.eq(service_types::service_type_id)))
         .filter(orders::enabled.eq(true))
         .filter(orders::merchant_id.eq(merchant_id))
         .filter(orders::order_id.eq(new_appointment.order_id))
-        .get_result::<(Order,Option<Member>,Option<Barber>,Option<ServiceType>)>(&mut *conn)
+        .get_result::<(Order,Option<MerchantMember>,Option<Barber>,Option<ServiceType>)>(&mut *conn)
         .map(|t|Event{
             all_day:false,
             editable:false,
@@ -215,13 +217,13 @@ pub async fn get_appointment(
     let merchant_id=Uuid::parse_str(auth.axum_session.lock().unwrap().get_data(constant::MERCHANT_ID)).unwrap();
 
     let event=orders::table
-        .left_join(members::table.on(members::member_id.nullable().eq(orders::member_id)))
+        .left_join(merchant_members::table.on(merchant_members::member_id.nullable().eq(orders::member_id)))
         .left_join(barbers::table.on(orders::barber_id.eq(barbers::barber_id)))
         .left_join(service_types::table.on(orders::service_type_id.eq(service_types::service_type_id)))
         .filter(orders::enabled.eq(true))
         .filter(orders::merchant_id.eq(merchant_id))
         .filter(orders::order_id.eq(appointment_id))
-        .get_result::<(Order,Option<Member>,Option<Barber>,Option<ServiceType>)>(&mut *conn)
+        .get_result::<(Order,Option<MerchantMember>,Option<Barber>,Option<ServiceType>)>(&mut *conn)
         .map(|t|Event{
             all_day:false,
             editable:false,

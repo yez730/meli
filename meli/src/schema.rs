@@ -30,23 +30,6 @@ diesel::table! {
 }
 
 diesel::table! {
-    members (id) {
-        id -> Int8,
-        user_id -> Uuid,
-        member_id -> Uuid,
-        cellphone -> Varchar,
-        real_name -> Varchar,
-        gender -> Nullable<Varchar>,
-        birth_day -> Nullable<Date>,
-        enabled -> Bool,
-        create_time -> Timestamptz,
-        update_time -> Timestamptz,
-        data -> Nullable<Text>,
-        remark -> Nullable<Text>,
-    }
-}
-
-diesel::table! {
     merchant_members (id) {
         id -> Int8,
         merchant_id -> Uuid,
@@ -56,6 +39,11 @@ diesel::table! {
         create_time -> Timestamptz,
         update_time -> Timestamptz,
         data -> Nullable<Text>,
+        cellphone -> Varchar,
+        real_name -> Varchar,
+        gender -> Nullable<Varchar>,
+        birth_day -> Nullable<Date>,
+        remark -> Nullable<Text>,
     }
 }
 
@@ -199,7 +187,6 @@ diesel::table! {
 diesel::allow_tables_to_appear_in_same_query!(
     barbers,
     login_infos,
-    members,
     merchant_members,
     merchants,
     orders,
