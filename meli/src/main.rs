@@ -36,6 +36,7 @@ async fn main(){
         pool:get_connection_pool()
     };
 
+    let front_addr=std::env::var("FRONTEND_ADDR").expect("Cannot find RUST_LOG environment variable.");
     let app=Router::with_state(axum_pg.clone())
         .route("/login", post(barber_login_by_password))
         .route("/identity/logout", get(logout))
@@ -68,7 +69,7 @@ async fn main(){
         .route("/statistic/recharge_records",get(get_recharge_records))
 
         .layer(CorsLayer::new()
-            .allow_origin(std::env::var("FRONTEND_ADDR").expect("Cannot find RUST_LOG environment variable.").parse::<HeaderValue>().unwrap(),)
+            .allow_origin(front_addr.parse::<HeaderValue>().unwrap(),)
             .allow_headers([
                 header::CONTENT_TYPE,
                 header::HeaderName::from_str("X-SID").unwrap(),
@@ -79,7 +80,7 @@ async fn main(){
         .layer(AuthSessionLayer::<AxumPg, AxumPg,User>::new(axum_pg.clone()))
         .layer(AxumSessionLayer::new(
             AxumSessionStore::new(axum_pg.clone(),
-            AxumSessionConfig::default().with_cookie_domain("127.0.0.1"))
+            AxumSessionConfig::default().with_cookie_domain(front_addr))
         ))
         .layer(TraceLayer::new_for_http());
 
