@@ -68,7 +68,7 @@ async fn main(){
         .route("/statistic/recharge_records",get(get_recharge_records))
 
         .layer(CorsLayer::new()
-            .allow_origin("http://127.0.0.1:8080".parse::<HeaderValue>().unwrap(),)
+            .allow_origin(std::env::var("FRONTEND_ADDR").expect("Cannot find RUST_LOG environment variable.").parse::<HeaderValue>().unwrap(),)
             .allow_headers([
                 header::CONTENT_TYPE,
                 header::HeaderName::from_str("X-SID").unwrap(),
