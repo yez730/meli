@@ -84,7 +84,7 @@ async fn main(){
         ))
         .layer(TraceLayer::new_for_http());
 
-    let addr=SocketAddr::from(([108,61,207,107],3000));
+    let addr=SocketAddr::from(([108,61,207,107],4000));
     tracing::debug!("listening on {}",addr);
     println!("server restarted");
     axum::Server::bind(&addr)
