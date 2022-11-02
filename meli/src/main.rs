@@ -86,7 +86,7 @@ async fn main(){
 
     let addr=SocketAddr::from(([108,61,207,107],3000));
     tracing::debug!("listening on {}",addr);
-
+    println!("server restarted");
     axum::Server::bind(&addr)
         .serve(app.into_make_service())
         .await
