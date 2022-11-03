@@ -1,4 +1,4 @@
-use std::{net::SocketAddr, str::FromStr};
+use std::{net::{SocketAddr, IpAddr}, str::FromStr};
 use axum::{Router, routing::{get, post}, http::{HeaderValue, header, Method}};
 use axum_session_authentication_middleware::layer::AuthSessionLayer;
 use axum_session_middleware::{layer::AxumSessionLayer, session_store::AxumSessionStore, config::AxumSessionConfig};
@@ -36,7 +36,12 @@ async fn main(){
         pool:get_connection_pool()
     };
 
-    let front_addr=std::env::var("FRONTEND_ADDR").expect("Cannot find RUST_LOG environment variable.");
+    let host_ip=std::env::var("HOST_IP").expect("Cannot find HOST_IP environment variable.");
+    let frontend_port=std::env::var("FRONTEND_PORT").expect("Cannot find FRONTEND_PORT environment variable.");
+    let backend_port=std::env::var("BACKEND_PORT").expect("Cannot find BACKEND_PORT environment variable.").parse::<u16>().expect("Not available BACKEND_PORT value");
+
+    let cross_origin=format!("http://{}:{}",host_ip.as_str(),frontend_port);
+
     let app=Router::with_state(axum_pg.clone())
         .route("/login", post(barber_login_by_password))
         .route("/identity/logout", get(logout))
@@ -69,7 +74,7 @@ async fn main(){
         .route("/statistic/recharge_records",get(get_recharge_records))
 
         .layer(CorsLayer::new()
-            .allow_origin(front_addr.parse::<HeaderValue>().unwrap(),)
+            .allow_origin(cross_origin.parse::<HeaderValue>().unwrap(),)
             .allow_headers([
                 header::CONTENT_TYPE,
                 header::HeaderName::from_str("X-SID").unwrap(),
@@ -80,13 +85,14 @@ async fn main(){
         .layer(AuthSessionLayer::<AxumPg, AxumPg,User>::new(axum_pg.clone()))
         .layer(AxumSessionLayer::new(
             AxumSessionStore::new(axum_pg.clone(),
-            AxumSessionConfig::default().with_cookie_domain("108.61.207.107"))
+            AxumSessionConfig::default().with_cookie_domain(host_ip.clone()))
         ))
         .layer(TraceLayer::new_for_http());
 
-    let addr=SocketAddr::from(([108,61,207,107],3000));
+    let addr=SocketAddr::from((
+        IpAddr::from_str(host_ip.as_str()).unwrap(),backend_port));
+
     tracing::debug!("listening on {}",addr);
-    println!("server restarted");
     axum::Server::bind(&addr)
         .serve(app.into_make_service())
         .await
