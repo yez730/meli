@@ -37,10 +37,14 @@ async fn main(){
     };
 
     let host_ip=std::env::var("HOST_IP").expect("Cannot find HOST_IP environment variable.");
-    let frontend_port=std::env::var("FRONTEND_PORT").expect("Cannot find FRONTEND_PORT environment variable.");
+    let frontend_port=std::env::var("FRONTEND_PORT").expect("Cannot find FRONTEND_PORT environment variable.").parse::<u16>().expect("Not available BACKEND_PORT value");
     let backend_port=std::env::var("BACKEND_PORT").expect("Cannot find BACKEND_PORT environment variable.").parse::<u16>().expect("Not available BACKEND_PORT value");
 
-    let cross_origin=format!("http://{}:{}",host_ip.as_str(),frontend_port);
+    let cross_origin= if frontend_port ==80 {
+        format!("http://{}",host_ip.as_str())
+    } else {
+        format!("http://{}:{}",host_ip.as_str(),frontend_port)
+    };
 
     let app=Router::with_state(axum_pg.clone())
         .route("/login", post(barber_login_by_password))
