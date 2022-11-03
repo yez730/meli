@@ -36,9 +36,20 @@ async fn main(){
         pool:get_connection_pool()
     };
 
-    let host_ip=std::env::var("HOST_IP").expect("Cannot find HOST_IP environment variable.");
-    let frontend_port=std::env::var("FRONTEND_PORT").expect("Cannot find FRONTEND_PORT environment variable.").parse::<u16>().expect("Not available BACKEND_PORT value");
-    let backend_port=std::env::var("BACKEND_PORT").expect("Cannot find BACKEND_PORT environment variable.").parse::<u16>().expect("Not available BACKEND_PORT value");
+    let env_var=std::env::var("MELI").unwrap_or("DEV".into());
+    let (host_ip,frontend_port,backend_port)=if env_var=="PROD" {
+        (
+            std::env::var("PROD_HOST_IP").expect("Cannot find HOST_IP environment variable."),
+            std::env::var("PROD_FRONTEND_PORT").expect("Cannot find FRONTEND_PORT environment variable.").parse::<u16>().expect("Not available BACKEND_PORT value"),
+            std::env::var("PROD_BACKEND_PORT").expect("Cannot find BACKEND_PORT environment variable.").parse::<u16>().expect("Not available BACKEND_PORT value"),
+        )
+    } else {
+        (
+            std::env::var("DEV_HOST_IP").expect("Cannot find HOST_IP environment variable."),
+            std::env::var("DEV_FRONTEND_PORT").expect("Cannot find FRONTEND_PORT environment variable.").parse::<u16>().expect("Not available BACKEND_PORT value"),
+            std::env::var("DEV_BACKEND_PORT").expect("Cannot find BACKEND_PORT environment variable.").parse::<u16>().expect("Not available BACKEND_PORT value"),
+        )
+    };
 
     let cross_origin= if frontend_port ==80 {
         format!("http://{}",host_ip.as_str())
