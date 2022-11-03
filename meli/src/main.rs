@@ -39,18 +39,17 @@ async fn main(){
     let env_var=std::env::var("MELI").unwrap_or("DEV".into());
     let (host_ip,frontend_port,backend_port)=if env_var=="PROD" {
         (
-            std::env::var("PROD_HOST_IP").expect("Cannot find HOST_IP environment variable."),
-            std::env::var("PROD_FRONTEND_PORT").expect("Cannot find FRONTEND_PORT environment variable.").parse::<u16>().expect("Not available BACKEND_PORT value"),
-            std::env::var("PROD_BACKEND_PORT").expect("Cannot find BACKEND_PORT environment variable.").parse::<u16>().expect("Not available BACKEND_PORT value"),
+            std::env::var("PROD_HOST_IP").expect("Cannot find PROD_HOST_IP environment variable."),
+            std::env::var("PROD_FRONTEND_PORT").expect("Cannot find PROD_FRONTEND_PORT environment variable.").parse::<u16>().expect("Not available PROD_FRONTEND_PORT value"),
+            std::env::var("PROD_BACKEND_PORT").expect("Cannot find PROD_BACKEND_PORT environment variable.").parse::<u16>().expect("Not available PROD_BACKEND_PORT value"),
         )
     } else {
         (
-            std::env::var("DEV_HOST_IP").expect("Cannot find HOST_IP environment variable."),
-            std::env::var("DEV_FRONTEND_PORT").expect("Cannot find FRONTEND_PORT environment variable.").parse::<u16>().expect("Not available BACKEND_PORT value"),
-            std::env::var("DEV_BACKEND_PORT").expect("Cannot find BACKEND_PORT environment variable.").parse::<u16>().expect("Not available BACKEND_PORT value"),
+            std::env::var("DEV_HOST_IP").expect("Cannot find DEV_HOST_IP environment variable."),
+            std::env::var("DEV_FRONTEND_PORT").expect("Cannot find DEV_FRONTEND_PORT environment variable.").parse::<u16>().expect("Not available DEV_FRONTEND_PORT value"),
+            std::env::var("DEV_BACKEND_PORT").expect("Cannot find DEV_BACKEND_PORT environment variable.").parse::<u16>().expect("Not available DEV_BACKEND_PORT value"),
         )
     };
-
     let cross_origin= if frontend_port ==80 {
         format!("http://{}",host_ip.as_str())
     } else {
