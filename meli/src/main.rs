@@ -118,9 +118,13 @@ async fn main(){
 
     let addr=SocketAddr::from((IpAddr::from_str(host_ip.as_str()).unwrap(),backend_port));
 
-    tracing::debug!("https listening on {}",addr);
+    tracing::debug!("http listening on {}",addr);
 
-    axum_server::bind_rustls(addr, config)
+    // axum_server::bind_rustls(addr, config)
+    //     .serve(app.into_make_service())
+    //     .await
+    //     .unwrap();
+        axum::Server::bind(&addr)
         .serve(app.into_make_service())
         .await
         .unwrap();
