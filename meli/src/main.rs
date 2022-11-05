@@ -1,7 +1,9 @@
-use std::{net::{SocketAddr, IpAddr}, str::FromStr};
+use std::{net::{SocketAddr, IpAddr},path::PathBuf, str::FromStr};
 use axum::{Router, routing::{get, post}, http::{HeaderValue, header, Method}};
 use axum_session_authentication_middleware::layer::AuthSessionLayer;
 use axum_session_middleware::{layer::AxumSessionLayer, session_store::AxumSessionStore, config::AxumSessionConfig};
+
+use axum_server::tls_rustls::RustlsConfig;
 
 use tower_http::{trace::TraceLayer};
 use tower_http::cors::CorsLayer;
@@ -51,10 +53,21 @@ async fn main(){
         )
     };
     let cross_origin= if frontend_port ==80 {
-        format!("http://{}",host_ip.as_str())
+        format!("https://{}",host_ip.as_str())
     } else {
-        format!("http://{}:{}",host_ip.as_str(),frontend_port)
+        format!("https://{}:{}",host_ip.as_str(),frontend_port)
     };
+
+    // configure certificate and private key used by https
+    let config = RustlsConfig::from_pem_file(
+        PathBuf::from("/home/yez/cert")
+            .join("ahab.me.pem"),
+        PathBuf::from("/home/yez/cert")
+            .join("ahab.me.key"),
+    )
+    .await
+    .unwrap();
+
 
     let app=Router::with_state(axum_pg.clone())
         .route("/login", post(barber_login_by_password))
@@ -103,11 +116,11 @@ async fn main(){
         ))
         .layer(TraceLayer::new_for_http());
 
-    let addr=SocketAddr::from((
-        IpAddr::from_str(host_ip.as_str()).unwrap(),backend_port));
+    let addr=SocketAddr::from((IpAddr::from_str(host_ip.as_str()).unwrap(),backend_port));
 
-    tracing::debug!("listening on {}",addr);
-    axum::Server::bind(&addr)
+    tracing::debug!("https listening on {}",addr);
+
+    axum_server::bind_rustls(addr, config)
         .serve(app.into_make_service())
         .await
         .unwrap();
