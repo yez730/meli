@@ -52,7 +52,7 @@ async fn main(){
             std::env::var("DEV_BACKEND_PORT").expect("Cannot find DEV_BACKEND_PORT environment variable.").parse::<u16>().expect("Not available DEV_BACKEND_PORT value"),
         )
     };
-    let cross_origin= if frontend_port ==80 {
+    let cross_origin= if frontend_port ==443 {
         format!("https://{}",host_ip.as_str())
     } else {
         format!("https://{}:{}",host_ip.as_str(),frontend_port)
