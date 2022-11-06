@@ -113,7 +113,7 @@ async fn main(){
         .layer(AuthSessionLayer::<AxumPg, AxumPg,User>::new(axum_pg.clone()))
         .layer(AxumSessionLayer::new(
             AxumSessionStore::new(axum_pg.clone(),
-            AxumSessionConfig::default().with_cookie_domain("www.ahab.me"))
+            AxumSessionConfig::default().with_cookie_domain(host_ip.clone()))
         ))
         .layer(TraceLayer::new_for_http());
 
