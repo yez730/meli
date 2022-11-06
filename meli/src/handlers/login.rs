@@ -39,8 +39,12 @@ pub async fn barber_login_by_password(State(pg):State<AxumPg>,mut auth: AuthSess
         return Err((StatusCode::BAD_REQUEST,"用户禁止登录".into()));
     }
 
-    argon2::verify_encoded(&provider.unwrap().password_hash, req.password.as_bytes())
+    let matched=argon2::verify_encoded(&provider.unwrap().password_hash, req.password.as_bytes())
         .map_err(|_|(StatusCode::BAD_REQUEST,"密码验证失败".to_string()))?;
+
+    if !matched {
+        return Err((StatusCode::BAD_REQUEST,"密码不正确".into()));
+    }
 
     let barber_response=barbers::table
         .inner_join(merchants::table.on(barbers::merchant_id.eq(merchants::merchant_id)))
