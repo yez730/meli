@@ -54,7 +54,7 @@ async fn main(){
     };
     let cross_origin= if frontend_port ==443 {
         // format!("https://{}",host_ip.as_str())
-        format!("https://ahab.me")
+        format!("https://www.ahab.me")
     } else {
         format!("https://{}:{}",host_ip.as_str(),frontend_port)
     };
