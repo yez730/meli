@@ -1,9 +1,7 @@
-use std::{net::{SocketAddr, IpAddr},path::PathBuf, str::FromStr};
+use std::{net::SocketAddr, str::FromStr};
 use axum::{Router, routing::{get, post}, http::{HeaderValue, header, Method}};
 use axum_session_authentication_middleware::layer::AuthSessionLayer;
 use axum_session_middleware::{layer::AxumSessionLayer, session_store::AxumSessionStore, config::AxumSessionConfig};
-
-use axum_server::tls_rustls::RustlsConfig;
 
 use tower_http::{trace::TraceLayer};
 use tower_http::cors::CorsLayer;
@@ -39,36 +37,11 @@ async fn main(){
     };
 
     let env_var=std::env::var("MELI").unwrap_or("DEV".into());
-    let (host_ip,frontend_port,backend_port)=if env_var=="PROD" {
-        (
-            std::env::var("PROD_HOST_IP").expect("Cannot find PROD_HOST_IP environment variable."),
-            std::env::var("PROD_FRONTEND_PORT").expect("Cannot find PROD_FRONTEND_PORT environment variable.").parse::<u16>().expect("Not available PROD_FRONTEND_PORT value"),
-            std::env::var("PROD_BACKEND_PORT").expect("Cannot find PROD_BACKEND_PORT environment variable.").parse::<u16>().expect("Not available PROD_BACKEND_PORT value"),
-        )
+    let cross_origin=if env_var=="PROD" {
+        std::env::var("PROD_CROSS_ORIGIN").expect("Cannot find PROD_CROSS_ORIGIN environment variable.")
     } else {
-        (
-            std::env::var("DEV_HOST_IP").expect("Cannot find DEV_HOST_IP environment variable."),
-            std::env::var("DEV_FRONTEND_PORT").expect("Cannot find DEV_FRONTEND_PORT environment variable.").parse::<u16>().expect("Not available DEV_FRONTEND_PORT value"),
-            std::env::var("DEV_BACKEND_PORT").expect("Cannot find DEV_BACKEND_PORT environment variable.").parse::<u16>().expect("Not available DEV_BACKEND_PORT value"),
-        )
+        std::env::var("DEV_CROSS_ORIGIN").expect("Cannot find DEV_CROSS_ORIGIN environment variable.")
     };
-    let cross_origin= if frontend_port ==443 {
-        // format!("https://{}",host_ip.as_str())
-        format!("https://ahab.me")
-    } else {
-        format!("https://{}:{}",host_ip.as_str(),frontend_port)
-    };
-
-    // configure certificate and private key used by https
-    let config = RustlsConfig::from_pem_file(
-        PathBuf::from("/home/yez/cert")
-            .join("ahab.me.pem"),
-        PathBuf::from("/home/yez/cert")
-            .join("ahab.me.key"),
-    )
-    .await
-    .unwrap();
-
 
     let app=Router::with_state(axum_pg.clone())
         .route("/login", post(barber_login_by_password))
@@ -113,20 +86,16 @@ async fn main(){
         .layer(AuthSessionLayer::<AxumPg, AxumPg,User>::new(axum_pg.clone()))
         .layer(AxumSessionLayer::new(
                 AxumSessionStore::new(axum_pg.clone(),
-                AxumSessionConfig::default(),//.with_cookie_domain("ahab.me")
+                AxumSessionConfig::default()
             )
         ))
         .layer(TraceLayer::new_for_http());
 
-    let addr=SocketAddr::from((IpAddr::from_str(host_ip.as_str()).unwrap(),backend_port));
+    let addr=SocketAddr::from(([127,0,0,1],3000));
 
     tracing::debug!("http listening on {}",addr);
 
-    // axum_server::bind_rustls(addr, config)
-    //     .serve(app.into_make_service())
-    //     .await
-    //     .unwrap();
-        axum::Server::bind(&addr)
+    axum::Server::bind(&addr)
         .serve(app.into_make_service())
         .await
         .unwrap();
