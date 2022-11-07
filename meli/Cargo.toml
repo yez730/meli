@@ -33,7 +33,6 @@ rust-argon2 = "1.0"
 
 cookie = { version = "0.16.0" }
 bigdecimal={version = "0.3",features = ["serde"]}
-random_color="0.6"
 
 regex = "1.6.0"
 email_address = "0.2.3"

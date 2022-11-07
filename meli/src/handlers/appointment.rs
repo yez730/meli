@@ -5,7 +5,6 @@ use chrono::{Local, DateTime};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use uuid::Uuid;
-use random_color::RandomColor;
 use crate::{
     schema::*,
     models::*, 
@@ -106,7 +105,7 @@ pub async fn get_appointments(
             all_day:false,
             editable:false,
             start_editable:false,
-            background_color:RandomColor::new().to_rgb_string(), // rgb(139, 218, 232)
+            background_color:"rgb(56, 189, 248)".to_string(),
             display:"auto".into(),
             title: "".into(),
             extended_props:json!({
@@ -174,7 +173,7 @@ pub async fn add_appointment(
             all_day:false,
             editable:false,
             start_editable:false,
-            background_color:RandomColor::new().to_rgb_string(), // rgb(139, 218, 232)
+            background_color: "rgb(56, 189, 248)".to_string(),
             display:"auto".into(),
             title: "".into(),
             extended_props:json!({
@@ -228,7 +227,7 @@ pub async fn get_appointment(
             all_day:false,
             editable:false,
             start_editable:false,
-            background_color:RandomColor::new().to_rgb_string(), // rgb(139, 218, 232)
+            background_color:"rgb(56, 189, 248)".to_string(),
             display:"auto".into(),
             title: "".into(),
             extended_props:json!({
