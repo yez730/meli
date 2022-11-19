@@ -25,14 +25,12 @@ use diesel::{
 use super::barber::BarberResponse; 
 
 #[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct RegisterMerchantRequest{
-    #[serde(rename="merchantName")]
     pub merchant_name:String,
 
-    #[serde(rename="loginAccount")]
     pub login_account:String,
 
-    #[serde(rename="accountRealName")]
     pub account_real_name:String,
 
     pub password:String,

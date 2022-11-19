@@ -334,15 +334,14 @@ pub async fn delete_barber(
 }
 
 #[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct BarberEditRequest{
     pub cellphone:Option<String>,
 
-    #[serde(rename ="realName")]
     pub real_name:String,
 
     pub email:Option<String>,
 
-    #[serde(rename ="permissionIds")]
     pub permission_ids:Vec<Uuid>,
 }
 
@@ -583,11 +582,11 @@ async fn refresh_identity_data(user_id:Uuid, pg:AxumPg){
 }
 
 #[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct BarberEditResponse{
     #[serde(flatten)]
     pub barber:Barber,
 
-    #[serde(rename ="permissionCodes")]
     pub permission_codes:Vec<String>,
 }
 
@@ -629,11 +628,10 @@ pub async fn get_barber(
 }
 
 #[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct PermissionResponse{
-    #[serde(rename ="allPermissions")]
     pub all_permissions:Vec<Permission>,
 
-    #[serde(rename ="defaultPermissions")]
     pub default_permissions:Vec<Permission>,
 }
 

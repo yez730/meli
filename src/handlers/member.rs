@@ -15,15 +15,14 @@ use crate::{models::User, axum_pg::AxumPg};
 use super::{PaginatedListRequest,PaginatedListResponse, Search, statistic::{OrderResponse, RechargeRecordResponse}};
 
 #[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct MemberRequest{
     pub cellphone:String,
 
-    #[serde(rename ="realName")]
     pub real_name:String,
 
     pub gender:Option<String>,
 
-    #[serde(rename ="birthDay")]
     pub birth_day:Option<NaiveDate>,
 
     pub remark:Option<String>,

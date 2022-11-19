@@ -17,16 +17,14 @@ use crate::{models::User, axum_pg::AxumPg};
 use super::{PaginatedListRequest,PaginatedListResponse, Search};
 
 #[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct ServiceTypeRequest{
     pub name:String,
 
-    #[serde(rename ="normalPrize")]
     pub normal_prize:BigDecimal,
 
-    #[serde(rename ="memberPrize")]
     pub member_prize:BigDecimal,
 
-    #[serde(rename ="estimatedDuration")]
     pub estimated_duration: i32,
 }
 

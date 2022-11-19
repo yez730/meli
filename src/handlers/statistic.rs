@@ -20,34 +20,28 @@ use crate::{
 use super::{PaginatedListResponse, PaginatedListRequest, Search};
 
 #[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct OrderResponse{
     #[serde(rename="id")]
     pub order_id:Uuid,
 
-    #[serde(rename="serviceName")]
     pub service_name:String,
 
-    #[serde(rename="consumerType")]
     pub consumer_type:String,
 
-    #[serde(rename="memberName")]
     pub member_name:String,
 
-    #[serde(rename="memberCellphone")]
     pub member_cellphone:String,
 
-    #[serde(rename="totalMinutes")]
     pub total_minutes:i64,
 
     pub amount:BigDecimal,
 
-    #[serde(rename="paymentType")]
     pub payment_type:String,
 
-    #[serde(rename="barberName")]
     pub barber_name:String,
 
-    #[serde(rename="createTime",with = "my_date_format")]
+    #[serde(with = "my_date_format")]
     pub create_time:chrono::DateTime<Local>,
 }
 
@@ -120,22 +114,20 @@ pub async fn get_orders(
 }
 
 #[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct RechargeRecordResponse{
     #[serde(rename="id")]
     pub recharge_record_id:Uuid,
 
-    #[serde(rename="memberName")]
     pub member_name:String,
 
-    #[serde(rename="memberCellphone")]
     pub member_cellphone:String,
     
     pub amount:BigDecimal,
 
-    #[serde(rename="barberName")]
     pub barber_name:String,
 
-    #[serde(rename="crateTime",with = "my_date_format")]
+    #[serde(with = "my_date_format")]
     pub crate_time:chrono::DateTime<Local>,
 }
 

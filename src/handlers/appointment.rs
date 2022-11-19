@@ -17,23 +17,18 @@ use crate::{models::User, axum_pg::AxumPg};
 use super::Search;
 
 #[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct AppointmentRequest{
-    #[serde(rename ="startTime")]
     pub start_time:DateTime<Local>,
 
-    #[serde(rename ="endTime")]
     pub end_time:DateTime<Local>,
 
-    #[serde(rename ="serviceTypeId")]
     pub service_type_id:Uuid,
 
-    #[serde(rename ="barberId")]
     pub barber_id:Uuid,
 
-    #[serde(rename ="memberId")]
     pub member_id:Option<Uuid>,
 
-    #[serde(rename ="paymentType")]
     pub payment_type:String, // member/cash
 
     pub amount:BigDecimal,
@@ -41,32 +36,28 @@ pub struct AppointmentRequest{
 }
 
 #[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct CalendarRequest{
-    #[serde(rename ="startDate")]
     pub start_date:DateTime<Local>,
 
-    #[serde(rename ="endDate")]
     pub end_date:DateTime<Local>,
 }
 
 #[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct Event{
-    #[serde(rename = "allDay")]
     pub all_day:bool,//false
    
     pub title:String,
 
     pub editable:bool,//false
 
-    #[serde(rename = "startEditable")]
     pub start_editable:bool,//false
 
     pub display:String,//'auto' or 'background'
 
-    #[serde(rename = "backgroundColor")]
     pub background_color:String,
 
-    #[serde(rename = "extendedProps")]
     pub extended_props:Value,//需为json对象
 
     #[serde(flatten)]

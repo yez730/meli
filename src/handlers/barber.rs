@@ -55,27 +55,22 @@ pub async fn get_current_barber(
 }
 
 #[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct UpdateInfoRequest{
-    #[serde(rename="realName")]
     pub real_name:String,
 
     pub cellphone:Option<String>,
 
     pub email:Option<String>,
 
-    #[serde(rename="newPassword")]
     pub new_password:Option<String>,
 
-    #[serde(rename="oldPassword")]
     pub old_password:Option<String>,
 
-    #[serde(rename="merchantName")]
     pub merchant_name:String,
 
-    #[serde(rename="merchantAdderss")]
     pub merchant_address:Option<String>,
 
-    #[serde(rename="merchantRemark")]
     pub merchant_remark:Option<String>,
 }
 
