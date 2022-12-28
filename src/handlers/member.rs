@@ -98,7 +98,7 @@ pub async fn add_member(
         .get_result::<bool>(&mut *conn)
         .unwrap();
     if member_existed {
-        return Err((StatusCode::BAD_REQUEST,"已添加该手机号的理发师".to_string()));
+        return Err((StatusCode::BAD_REQUEST,"已添加该手机号的会员".to_string()));
     }
 
     let new_member=NewMerchantMember{
